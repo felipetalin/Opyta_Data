@@ -1,0 +1,41 @@
+# Ambientes
+.venv/
+venv/
+dashboard_env/
+
+# Python
+__pycache__/
+*.pyc
+
+# Secrets
+.env
+.env.*
+*.pem
+*.key
+
+# Saídas
+exports/
+output/
+outputs/
+cache/
+tmp/
+
+# Dados
+data/
+*.xlsx
+*.csv
+*.parquet
+*.pdf
+*.kmz
+*.kml
+
+# Sistema
+.DS_Store
+Thumbs.db
+
+desktop.ini
+.venv/
+.env
+.env.*
+
+.vscode/
