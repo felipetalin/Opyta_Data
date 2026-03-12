@@ -17,6 +17,12 @@ st.set_page_config(
     layout="wide"
 )
 
+# pequeno ajuste visual
+st.markdown(
+    "<style>img {margin-bottom:20px;}</style>",
+    unsafe_allow_html=True
+)
+
 
 def require_login():
 
@@ -26,18 +32,12 @@ def require_login():
     if st.session_state.logged_in:
         return True
 
-    # login centralizado
+    # centraliza login
     col_left, col_center, col_right = st.columns([1, 2, 1])
 
     with col_center:
 
-        col1, col2 = st.columns([1,4])
-
-        with col1:
-            st.image("app/assets/y.png", width=70)
-
-        with col2:
-            st.image("app/assets/logo.png", width=260)
+        st.image("app/assets/logo.png", width=260)
 
         st.markdown("### Acesso à plataforma")
         st.info("Informe usuário e senha para acessar o sistema.")
@@ -68,6 +68,7 @@ if not require_login():
     st.stop()
 
 
+# sidebar
 with st.sidebar:
 
     st.image("app/assets/logo.png", use_container_width=True)
@@ -89,13 +90,7 @@ with st.sidebar:
         st.rerun()
 
 
-# tela inicial do sistema
-col1, col2 = st.columns([1,6])
-
-with col1:
-    st.image("app/assets/y.png", width=80)
-
-with col2:
-    st.image("app/assets/logo.png", width=320)
+# tela inicial
+st.image("app/assets/logo.png", width=320)
 
 st.write("Use o menu à esquerda para navegar pelo sistema.")
