@@ -63,5 +63,12 @@ with st.sidebar:
         st.rerun()
 
 
-st.title("OPYTA DATA — Fase 1")
+col1, col2 = st.columns([1,6])
+
+with col1:
+    st.image("app/assets/y.png", width=80)
+
+with col2:
+    st.image("app/assets/logo.png", width=300)
+
 st.write("Use o menu à esquerda.")
