@@ -1,8 +1,13 @@
+import streamlit as st
+
+if "logged_in" not in st.session_state or not st.session_state.logged_in:
+    st.warning("Faça login para acessar esta página.")
+    st.stop()
+
 import os
 import re
 import unicodedata
 import pandas as pd
-import streamlit as st
 from pathlib import Path
 from dotenv import load_dotenv
 from sqlalchemy import create_engine, text
@@ -10,7 +15,6 @@ from sqlalchemy import create_engine, text
 from runners.script_runner import run_python_script
 from runners.registry import GROUP_TO_ACTION_KEY, ACTIONS
 from validators.registry import VALIDATORS
-
 
 st.title("01 — Importação")
 
