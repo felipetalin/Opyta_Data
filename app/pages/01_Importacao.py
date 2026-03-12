@@ -23,6 +23,7 @@ RUNTIME_ROOT.mkdir(parents=True, exist_ok=True)
 load_dotenv()
 
 
+
 # ============================================================
 # Normalização / Correção segura (automática)
 # ============================================================

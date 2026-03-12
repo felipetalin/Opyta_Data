@@ -1,4 +1,10 @@
 import streamlit as st
+
+# 🔐 Proteção de login
+if "logged_in" not in st.session_state or not st.session_state.logged_in:
+    st.warning("Faça login para acessar esta página.")
+    st.stop()
+
 from pathlib import Path
 from datetime import datetime
 import re
@@ -6,6 +12,7 @@ import re
 from core.supabase_client import get_supabase
 from runners.script_runner import run_python_script
 from runners.registry import ACTIONS
+
 
 st.title("00 — Base Mestre (Espécies e Parâmetros)")
 

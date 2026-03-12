@@ -1,4 +1,9 @@
 import streamlit as st
+
+if "logged_in" not in st.session_state or not st.session_state.logged_in:
+    st.warning("Faça login para acessar esta página.")
+    st.stop()
+
 from pathlib import Path
 from datetime import datetime
 

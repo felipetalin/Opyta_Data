@@ -1,11 +1,15 @@
-# app/pages/03_Analises.py
 from __future__ import annotations
+
+import streamlit as st
+
+if "logged_in" not in st.session_state or not st.session_state.logged_in:
+    st.warning("Faça login para acessar esta página.")
+    st.stop()
 
 import os
 from pathlib import Path
 
 import pandas as pd
-import streamlit as st
 from sqlalchemy import create_engine
 
 from analises.common.base import RunContext
