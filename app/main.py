@@ -18,6 +18,10 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
+if "logged_in" not in st.session_state:
+    st.session_state.logged_in = False
+
+# CSS global
 st.markdown("""
 <style>
 #MainMenu {visibility: hidden;}
@@ -57,50 +61,47 @@ div.stButton > button:hover {
 }
 
 div[data-baseweb="input"] > div {
-    border-radius: 12px;
+    border: 1px solid #b8c1a3 !important;
+    border-radius: 12px !important;
+    background-color: #ffffff !important;
+}
+
+input {
+    background-color: #ffffff !important;
 }
 
 [data-testid="stAlert"] {
     border-radius: 12px;
 }
-
-.login-card {
-    background: white;
-    padding: 2rem 2rem 1.5rem 2rem;
-    border-radius: 20px;
-    box-shadow: 0 6px 24px rgba(0,0,0,0.08);
-    border: 1px solid #e8ecdf;
-}
-
-.login-title {
-    color: #2f3a1f;
-    font-weight: 700;
-    margin-top: 0.5rem;
-    margin-bottom: 0.2rem;
-}
-
-.login-subtitle {
-    color: #5f6b46;
-    margin-bottom: 1.2rem;
-}
 </style>
 """, unsafe_allow_html=True)
 
+# Esconde sidebar e navegação padrão antes do login
+if not st.session_state.logged_in:
+    st.markdown("""
+    <style>
+    [data-testid="stSidebar"] {display: none;}
+    [data-testid="stSidebarNav"] {display: none;}
+    </style>
+    """, unsafe_allow_html=True)
+else:
+    st.markdown("""
+    <style>
+    [data-testid="stSidebarNav"] {display: none;}
+    </style>
+    """, unsafe_allow_html=True)
+
 
 def require_login():
-    if "logged_in" not in st.session_state:
-        st.session_state.logged_in = False
-
     if st.session_state.logged_in:
         return True
 
     left, center, right = st.columns([1.2, 1.5, 1.2])
 
     with center:
-        st.markdown('<div class="login-card">', unsafe_allow_html=True)
         st.image("app/assets/logo.png", width=260)
-        st.markdown('<div class="login-title">Acesso à plataforma</div>', unsafe_allow_html=True)
-        st.markdown('<div class="login-subtitle">Entre com seu usuário e senha para continuar.</div>', unsafe_allow_html=True)
+        st.markdown("### Acesso à plataforma")
+        st.write("Entre com seu usuário e senha para continuar.")
 
         user_input = st.text_input("Usuário")
         pwd_input = st.text_input("Senha", type="password")
@@ -111,7 +112,6 @@ def require_login():
 
             if not valid_user or not valid_pwd:
                 st.error("Credenciais não configuradas.")
-                st.markdown("</div>", unsafe_allow_html=True)
                 return False
 
             if user_input == valid_user and pwd_input == valid_pwd:
@@ -120,8 +120,6 @@ def require_login():
                 st.rerun()
             else:
                 st.error("Usuário ou senha incorretos.")
-
-        st.markdown('</div>', unsafe_allow_html=True)
 
     return False
 
@@ -138,7 +136,7 @@ with st.sidebar:
     st.page_link("main.py", label="🏠 Início")
     st.page_link("pages/00_Base_Mestre.py", label="📚 Base Mestre")
     st.page_link("pages/01_Importacao.py", label="📥 Importação")
-    st.page_link("pages/02_Consolidacao.py", label="⚙ Consolidação")
+    st.page_link("pages/02_Consolidacao.py", label="⚙️ Consolidação")
     st.page_link("pages/03_Analises.py", label="📊 Análises")
 
     st.divider()
