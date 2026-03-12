@@ -104,14 +104,24 @@ def require_login():
         st.write("Entre com seu usuário e senha para continuar.")
 
         user_input = st.text_input("Usuário")
-        pwd_input = st.text_input("Senha", type="password")
+pwd_input = st.text_input("Senha", type="password")
 
-        if st.button("Entrar", use_container_width=True):
-            valid_user = os.getenv("OPTA_LOGIN_EMAIL") or st.secrets.get("OPTA_LOGIN_EMAIL")
-            valid_pwd = os.getenv("OPTA_LOGIN_PASSWORD") or st.secrets.get("OPTA_LOGIN_PASSWORD")
+if st.button("Entrar", use_container_width=True):
 
-            if not valid_user or not valid_pwd:
-                st.error("Credenciais não configuradas.")
+    USERS = {
+        "ismayllen@opyta.com.br": "123456",
+        "anamoreira@opyta.com.br": "123456",
+        "yurisimoes@opyta.com.br": "123456",
+        "wilder@opyta.com.br": "123456",
+        "felipetalin@opyta.com.br": "FTNblind19!"
+    }
+
+    if user_input in USERS and pwd_input == USERS[user_input]:
+        st.session_state.logged_in = True
+        st.session_state.logged_user = user_input
+        st.rerun()
+    else:
+        st.error("Usuário ou senha incorretos.")
                 return False
 
             if user_input == valid_user and pwd_input == valid_pwd:
