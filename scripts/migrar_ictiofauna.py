@@ -165,14 +165,26 @@ def migrar_dados(connection, df_capa, df_pontos, df_esforco, df_resultados):
     print(f"   {len(resultados_records)} registros de resultados inseridos/atualizados.")
     if warnings_especies: print(f"   Aviso: Os seguintes táxons não foram encontrados no cadastro mestre: {list(warnings_especies)}")
 
+from core.engine import get_engine
+
+
 def main():
-    if not os.path.exists(ARQUIVO_EXCEL): sys.exit(f"Erro: O arquivo '{ARQUIVO_EXCEL}' não foi encontrado.")
+    if not os.path.exists(ARQUIVO_EXCEL):
+        sys.exit(f"Erro: O arquivo '{ARQUIVO_EXCEL}' não foi encontrado.")
+
     try:
-        load_dotenv()
-        db_user, db_password, db_host, db_name = os.getenv('DB_USER'), os.getenv('DB_PASSWORD'), os.getenv('DB_HOST'), os.getenv('DB_NAME')
-        db_url = f"postgresql://{db_user}:{db_password}@{db_host}:5432/{db_name}"
-        engine = create_engine(db_url)
-    except Exception as e: sys.exit(f"Erro ao conectar ao banco de dados: {e}")
+        engine = get_engine()
+    except Exception as e:
+        sys.exit(f"Erro ao conectar ao banco de dados: {e}")
+
+    try:
+        with engine.begin() as connection:
+            # resto da sua lógica de migração aqui
+            pass
+    except Exception as e:
+        print("\n--- ERRO DURANTE A MIGRAÇÃO. A TRANSAÇÃO FOI REVERTIDA (ROLLBACK) ---")
+        print(f"   Detalhe do erro: {e}")
+        raise
     
     print(f"--- INICIANDO MIGRAÇÃO DE {GRUPO_BIOLOGICO_ALVO.upper()}: {ARQUIVO_EXCEL} ---")
     try:
