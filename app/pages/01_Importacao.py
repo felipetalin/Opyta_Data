@@ -1,31 +1,31 @@
-import streamlit as st
-
-if "logged_in" not in st.session_state or not st.session_state.logged_in:
-    st.warning("Faça login para acessar esta página.")
-    st.stop()
+from __future__ import annotations
 
 import os
 import re
 import unicodedata
-import pandas as pd
 from pathlib import Path
-from dotenv import load_dotenv
-from sqlalchemy import create_engine, text
 
+import pandas as pd
+import streamlit as st
+from sqlalchemy import text
+
+from core.engine import get_engine
+from runners.registry import ACTIONS, GROUP_TO_ACTION_KEY
 from runners.script_runner import run_python_script
-from runners.registry import GROUP_TO_ACTION_KEY, ACTIONS
 from validators.registry import VALIDATORS
+
+
+if "logged_in" not in st.session_state or not st.session_state.logged_in:
+    st.warning("Faça login para acessar esta página.")
+    st.stop()
 
 st.title("01 — Importação")
 
 # Raiz do projeto: .../Opyta_Data
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 
-RUNTIME_ROOT = Path("runtime/importacao")
+RUNTIME_ROOT = PROJECT_ROOT / "runtime" / "importacao"
 RUNTIME_ROOT.mkdir(parents=True, exist_ok=True)
-
-load_dotenv()
-
 
 
 # ============================================================
@@ -33,6 +33,7 @@ load_dotenv()
 # ============================================================
 
 _HYPHENS = r"[\u2010\u2011\u2012\u2013\u2014\u2212]"
+
 
 def normalize_text(x):
     if x is None or (isinstance(x, float) and pd.isna(x)):
@@ -46,6 +47,7 @@ def normalize_text(x):
     s = re.sub(r"\s*-\s*", "-", s)
     return s
 
+
 def normalize_df(df: pd.DataFrame) -> tuple[pd.DataFrame, int]:
     df2 = df.copy()
     changes = 0
@@ -58,6 +60,7 @@ def normalize_df(df: pd.DataFrame) -> tuple[pd.DataFrame, int]:
             changes += int(mask.sum())
 
     return df2, changes
+
 
 def write_clean_excel(excel_path: Path, cleaned_path: Path) -> int:
     xls = pd.ExcelFile(excel_path)
@@ -74,23 +77,7 @@ def write_clean_excel(excel_path: Path, cleaned_path: Path) -> int:
 
 
 # ============================================================
-# DB ENGINE
-# ============================================================
-
-def get_engine():
-    db_user = os.getenv("DB_USER")
-    db_password = os.getenv("DB_PASSWORD")
-    db_host = os.getenv("DB_HOST")
-    db_name = os.getenv("DB_NAME")
-
-    if not all([db_user, db_password, db_host, db_name]):
-        raise RuntimeError("Variáveis DB_USER/DB_PASSWORD/DB_HOST/DB_NAME não configuradas no .env")
-
-    return create_engine(f"postgresql://{db_user}:{db_password}@{db_host}:5432/{db_name}")
-
-
-# ============================================================
-# Resumo 2.1 — pós-migração (consultando banco, forma robusta)
+# Resumo 2.1 — pós-migração
 # ============================================================
 
 def gerar_resumo_pos_migracao(grupo: str, excel_path: Path):
@@ -99,7 +86,6 @@ def gerar_resumo_pos_migracao(grupo: str, excel_path: Path):
     - Projeto: via Codigo_Opyta do Excel
     - Campanhas / pontos: mostra o escopo do Excel
     - Esforços / resultados: conta no banco por projeto + grupo
-      (não depende de casar nome_ponto/nome_campanha)
     """
     xls = pd.ExcelFile(excel_path)
 
@@ -121,7 +107,6 @@ def gerar_resumo_pos_migracao(grupo: str, excel_path: Path):
     engine = get_engine()
 
     with engine.begin() as conn:
-        # Busca robusta do projeto
         id_projeto = conn.execute(
             text(
                 """
@@ -138,7 +123,6 @@ def gerar_resumo_pos_migracao(grupo: str, excel_path: Path):
             st.warning(f"Projeto não encontrado no banco para Código_Opyta = {codigo}")
             return
 
-        # Campanhas e pontos que existem no banco para o projeto (para transparência)
         rows_camp = conn.execute(
             text(
                 """
@@ -180,9 +164,6 @@ def gerar_resumo_pos_migracao(grupo: str, excel_path: Path):
             st.write("**Campanhas (Banco):**", campanhas_banco)
             st.write("**Pontos (Banco):**", pontos_banco)
 
-        # =====================================================
-        # Meio Físico
-        # =====================================================
         if grupo == "Meio Físico":
             total_res = conn.execute(
                 text(
@@ -201,20 +182,16 @@ def gerar_resumo_pos_migracao(grupo: str, excel_path: Path):
             b.metric("Resultados (Banco)", int(total_res or 0))
             return
 
-        # =====================================================
-        # Biota
-        # =====================================================
         tabela_map = {
             "Ictiofauna": "resultados_ictiofauna",
-            "Bentos": "resultados_zoobentos",      # ajuste se seu banco usar outro nome
+            "Bentos": "resultados_zoobentos",
             "Fitoplâncton": "resultados_fitoplancton",
             "Zooplâncton": "resultados_zooplancton",
         }
 
-        # grupo_biologico no banco pode ser ligeiramente diferente do dropdown
         grupo_banco_map = {
             "Ictiofauna": "Ictiofauna",
-            "Bentos": "Zoobentos",          # pelo seu log/script
+            "Bentos": "Zoobentos",
             "Fitoplâncton": "Fitoplancton",
             "Zooplâncton": "Zooplancton",
         }
@@ -223,7 +200,7 @@ def gerar_resumo_pos_migracao(grupo: str, excel_path: Path):
         grupo_banco = grupo_banco_map.get(grupo)
 
         if not tabela or not grupo_banco:
-            st.warning(f"Sem mapeamento de banco para o grupo '{grupo}'. Ajuste tabela_map/grupo_banco_map.")
+            st.warning(f"Sem mapeamento de banco para o grupo '{grupo}'.")
             return
 
         total_esforcos = conn.execute(
@@ -335,10 +312,28 @@ can_migrate = bool(st.session_state.get("validated_ok", False)) and excel_para_m
 if st.button("Migrar", disabled=not can_migrate):
     script_abs = (PROJECT_ROOT / spec.script).resolve()
 
+    extra_env = {}
+
+    try:
+        extra_env["DATABASE_URL"] = st.secrets["DATABASE_URL"]
+    except Exception:
+        if os.getenv("DATABASE_URL"):
+            extra_env["DATABASE_URL"] = os.getenv("DATABASE_URL")
+
+    try:
+        extra_env["SUPABASE_URL"] = st.secrets["SUPABASE_URL"]
+        extra_env["SUPABASE_ANON_KEY"] = st.secrets["SUPABASE_ANON_KEY"]
+    except Exception:
+        if os.getenv("SUPABASE_URL"):
+            extra_env["SUPABASE_URL"] = os.getenv("SUPABASE_URL")
+        if os.getenv("SUPABASE_ANON_KEY"):
+            extra_env["SUPABASE_ANON_KEY"] = os.getenv("SUPABASE_ANON_KEY")
+
     res = run_python_script(
         script_path=str(script_abs),
         args=[str(excel_para_migrar.resolve())],
         cwd=runtime_dir,
+        extra_env=extra_env,
     )
 
     ok = getattr(res, "status", "") == "success"
@@ -349,7 +344,12 @@ if st.button("Migrar", disabled=not can_migrate):
         st.error("Migração falhou ❌")
 
     stdout = getattr(res, "stdout", "") or ""
-    st.code(stdout if stdout.strip() else "(sem saída)", language="text")
+    stderr = getattr(res, "stderr", "") or ""
+
+    if stdout.strip():
+        st.code(stdout, language="text")
+    if stderr.strip():
+        st.code(stderr, language="text")
 
     st.markdown("---")
     st.subheader("Resumo pós-migração (2.1)")

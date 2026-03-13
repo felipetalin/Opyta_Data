@@ -1,39 +1,45 @@
-import subprocess
-import sys
-from pathlib import Path
-from dataclasses import dataclass
+from __future__ import annotations
+
 import os
+import subprocess
+from dataclasses import dataclass
+from pathlib import Path
+from typing import Optional
 
 
 @dataclass
-class RunResult:
+class ScriptRunResult:
     status: str
     stdout: str
+    stderr: str
+    returncode: int
 
 
-def run_python_script(script_path: str, args=None, cwd: Path | None = None) -> RunResult:
+def run_python_script(
+    script_path: str,
+    args: Optional[list[str]] = None,
+    cwd: Optional[Path] = None,
+    extra_env: Optional[dict[str, str]] = None,
+) -> ScriptRunResult:
     args = args or []
-    cmd = [sys.executable, script_path] + args
 
-    # força UTF-8 no subprocess
     env = os.environ.copy()
-    env["PYTHONIOENCODING"] = "utf-8"
-    env["PYTHONUTF8"] = "1"
+    if extra_env:
+        env.update(extra_env)
 
-    try:
-        result = subprocess.run(
-            cmd,
-            capture_output=True,
-            text=True,
-            encoding="utf-8",     # ✅ força decode utf-8
-            errors="replace",     # ✅ nunca quebra por caractere inválido
-            cwd=str(cwd) if cwd else None,
-            env=env,
-        )
+    cmd = ["python", script_path] + args
 
-        status = "success" if result.returncode == 0 else "error"
-        output = (result.stdout or "") + ("\n" + result.stderr if result.stderr else "")
-        return RunResult(status=status, stdout=output)
+    proc = subprocess.run(
+        cmd,
+        cwd=str(cwd) if cwd else None,
+        env=env,
+        capture_output=True,
+        text=True,
+    )
 
-    except Exception as e:
-        return RunResult(status="error", stdout=str(e))
+    return ScriptRunResult(
+        status="success" if proc.returncode == 0 else "error",
+        stdout=proc.stdout or "",
+        stderr=proc.stderr or "",
+        returncode=proc.returncode,
+    )
