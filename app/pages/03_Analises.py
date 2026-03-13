@@ -1,22 +1,23 @@
 from __future__ import annotations
 
-import streamlit as st
-
-if "logged_in" not in st.session_state or not st.session_state.logged_in:
-    st.warning("Faça login para acessar esta página.")
-    st.stop()
-
 import os
 from pathlib import Path
 
 import pandas as pd
+import streamlit as st
 from sqlalchemy import create_engine
 
 from analises.common.base import RunContext
 from analises.common.theme import get_theme, ordem_campanhas_padrao
-
-# runner do grupo (por enquanto você tem ictio)
 from analises.common.ictio.runner import run as run_ictio
+
+
+# =========================
+# BLOQUEIO DE ACESSO
+# =========================
+if "logged_in" not in st.session_state or not st.session_state.logged_in:
+    st.warning("Faça login para acessar esta página.")
+    st.stop()
 
 
 # =========================
@@ -26,14 +27,37 @@ st.set_page_config(page_title="03 - Análises", layout="wide")
 st.title("03 - Análises")
 st.info("Preencha o Projeto para carregar os dados.")
 
+
 # =========================
 # DB / ENGINE
 # =========================
 @st.cache_resource(show_spinner=False)
 def _get_engine():
+    """
+    Ordem de prioridade:
+    1) DATABASE_URL em st.secrets
+    2) DATABASE_URL em variável de ambiente
+    3) DB_USER / DB_PASSWORD / DB_HOST / DB_NAME / DB_PORT
+    """
     from dotenv import load_dotenv
+
     load_dotenv()
 
+    # 1) tenta Streamlit Secrets
+    database_url = None
+    try:
+        database_url = st.secrets.get("DATABASE_URL", None)
+    except Exception:
+        database_url = None
+
+    # 2) tenta variável de ambiente
+    if not database_url:
+        database_url = os.getenv("DATABASE_URL")
+
+    if database_url:
+        return create_engine(database_url, pool_pre_ping=True)
+
+    # 3) fallback para variáveis separadas
     db_user = os.getenv("DB_USER")
     db_password = os.getenv("DB_PASSWORD")
     db_host = os.getenv("DB_HOST")
@@ -48,7 +72,11 @@ def _get_engine():
     }.items() if not v]
 
     if faltando:
-        raise RuntimeError(f"Variáveis ausentes no .env: {', '.join(faltando)}")
+        raise RuntimeError(
+            "Variáveis de conexão ausentes. Configure DATABASE_URL "
+            "ou DB_USER/DB_PASSWORD/DB_HOST/DB_NAME. "
+            f"Faltando: {', '.join(faltando)}"
+        )
 
     url = f"postgresql://{db_user}:{db_password}@{db_host}:{db_port}/{db_name}"
     return create_engine(url, pool_pre_ping=True)
@@ -88,6 +116,22 @@ def listar_campanhas(projeto: str, grupo: str) -> list[str]:
 
 
 @st.cache_data(show_spinner=False)
+def listar_pontos(projeto: str, grupo: str) -> list[str]:
+    engine = _get_engine()
+    sql = """
+        SELECT DISTINCT nome_ponto
+        FROM public.biota_analise_consolidada
+        WHERE nome_projeto = %(projeto)s
+          AND grupo_biologico = %(grupo)s
+          AND nome_ponto IS NOT NULL
+        ORDER BY 1
+    """
+    with engine.connect() as conn:
+        df = pd.read_sql(sql, conn, params={"projeto": projeto, "grupo": grupo})
+    return df["nome_ponto"].astype(str).tolist()
+
+
+@st.cache_data(show_spinner=False)
 def carregar_df_base(projeto: str, grupo: str) -> pd.DataFrame:
     engine = _get_engine()
     query = """
@@ -111,7 +155,11 @@ projetos = listar_projetos()
 if busca_proj:
     projetos = [p for p in projetos if busca_proj in p.lower()]
 
-projeto = st.sidebar.selectbox("Projeto (nome_projeto)", options=[""] + projetos, index=0)
+projeto = st.sidebar.selectbox(
+    "Projeto (nome_projeto)",
+    options=[""] + projetos,
+    index=0
+)
 
 grupo = st.sidebar.selectbox(
     "Grupo (grupo_biologico)",
@@ -119,26 +167,69 @@ grupo = st.sidebar.selectbox(
     index=0,
 )
 
-campanhas = []
+tema = st.sidebar.selectbox(
+    "Tema",
+    options=["cliente_azul", "cliente_verde", "neutro"],
+    index=0
+)
+
+pasta_saida = st.sidebar.text_input(
+    "Pasta de saída (exports)",
+    value="exports"
+)
+
+exportar_arquivos = st.sidebar.toggle(
+    "Exportar arquivos (xlsx/png)",
+    value=False
+)
+
+campanhas: list[str] = []
 campanha = "(todas)"
+pontos: list[str] = []
+nome_ponto = "(todos)"
+
 if projeto:
     try:
         campanhas = listar_campanhas(projeto, grupo)
     except Exception:
         campanhas = []
-    campanha = st.sidebar.selectbox("Campanha (nome_campanha)", options=["(todas)"] + campanhas, index=0)
+
+    campanha = st.sidebar.selectbox(
+        "Campanha (nome_campanha)",
+        options=["(todas)"] + campanhas,
+        index=0
+    )
+
+    try:
+        pontos = listar_pontos(projeto, grupo)
+    except Exception:
+        pontos = []
+
+    nome_ponto = st.sidebar.selectbox(
+        "Ponto (nome_ponto)",
+        options=["(todos)"] + pontos,
+        index=0
+    )
 else:
-    st.sidebar.selectbox("Campanha (nome_campanha)", options=["(preencha projeto)"], index=0, disabled=True)
+    st.sidebar.selectbox(
+        "Campanha (nome_campanha)",
+        options=["(preencha projeto)"],
+        index=0,
+        disabled=True
+    )
+    st.sidebar.selectbox(
+        "Ponto (nome_ponto)",
+        options=["(preencha projeto)"],
+        index=0,
+        disabled=True
+    )
 
-tema = st.sidebar.selectbox("Tema", options=["cliente_azul", "cliente_verde", "neutro"], index=0)
-
-pasta_saida = st.sidebar.text_input("Pasta de saída (exports)", value=r"G:\Meu Drive\Opyta\Opyta_Data\exports")
-exportar_arquivos = st.sidebar.toggle("Exportar arquivos (xlsx/png)", value=False)
 
 # =========================
 # CARREGAR DADOS
 # =========================
 df_base = pd.DataFrame()
+
 if projeto:
     with st.spinner("Carregando dados do banco..."):
         df_base = carregar_df_base(projeto, grupo)
@@ -150,30 +241,44 @@ if projeto:
         with st.expander("Prévia (dados brutos)", expanded=False):
             st.dataframe(df_base.head(50), use_container_width=True)
 
+
 # =========================
 # EXECUÇÃO
 # =========================
 st.subheader("Execução")
 col_a, col_b = st.columns([1, 2], vertical_alignment="center")
 
-rodar = col_a.button("Rodar análises do grupo", disabled=not bool(projeto) or df_base.empty)
+rodar = col_a.button(
+    "Rodar análises do grupo",
+    disabled=(not bool(projeto) or df_base.empty)
+)
+
 col_b.caption("Executa o pacote do grupo. Se um bloco falhar, os demais continuam.")
 
 if rodar:
     df_trabalho = df_base.copy()
 
-    # filtro de campanha (se não for todas)
-    if campanha and campanha != "(todas)" and "nome_campanha" in df_trabalho.columns:
-        df_trabalho = df_trabalho[df_trabalho["nome_campanha"].astype(str).str.strip() == str(campanha).strip()]
+    # filtro campanha
+    if campanha != "(todas)" and "nome_campanha" in df_trabalho.columns:
+        df_trabalho = df_trabalho[
+            df_trabalho["nome_campanha"].astype(str).str.strip() == str(campanha).strip()
+        ].copy()
 
-    # contexto (usa o padrão de campanhas do theme.py)
-    ordem = ordem_campanhas_padrao(grupo) or sorted(df_trabalho["nome_campanha"].dropna().astype(str).unique().tolist())
+    # filtro ponto
+    if nome_ponto != "(todos)" and "nome_ponto" in df_trabalho.columns:
+        df_trabalho = df_trabalho[
+            df_trabalho["nome_ponto"].astype(str).str.strip() == str(nome_ponto).strip()
+        ].copy()
+
+    ordem = ordem_campanhas_padrao(grupo)
+    if ordem is None and "nome_campanha" in df_trabalho.columns:
+        ordem = sorted(df_trabalho["nome_campanha"].dropna().astype(str).unique().tolist())
 
     ctx = RunContext(
         projeto=projeto,
         grupo=grupo,
-        campanha=campanha,          # pode ser "(todas)"
-        ponto=None,
+        campanha=campanha,
+        nome_ponto=None if nome_ponto == "(todos)" else nome_ponto,
         pasta_saida=Path(pasta_saida),
         tema=tema,
         exportar_arquivos=exportar_arquivos,
@@ -182,41 +287,34 @@ if rodar:
 
     st.markdown("---")
 
-    # roteamento: por enquanto só ICTIO (você cria outros depois)
+    # Roteamento por grupo
     if grupo.lower() in ("ictiofauna", "ictio"):
         results = run_ictio(ctx, df_trabalho)
     else:
         st.warning("Runner desse grupo ainda não foi conectado. (Por enquanto: Ictiofauna)")
         results = []
 
-    # renderiza tudo o que o runner devolver
     if results:
-        theme_obj = get_theme(tema)
-
         for i, res in enumerate(results, start=1):
             st.subheader(f"{i:02d}) {res.title}")
+
+            if not res.ok:
+                st.error(res.error or "Erro desconhecido")
+                continue
+
+            if res.warnings:
+                for w in res.warnings:
+                    st.warning(w)
 
             if res.df is not None and not res.df.empty:
                 st.dataframe(res.df, use_container_width=True)
 
             if res.fig is not None:
-                # garante tema nos gráficos (se algum bloco não aplicou)
-                try:
-                    res.fig.update_traces()
-                    res.fig.update_layout()
-                except Exception:
-                    pass
                 st.plotly_chart(res.fig, use_container_width=True)
 
-            if getattr(res, "warnings", None):
-                for w in res.warnings:
-                    st.warning(w)
-
-            if getattr(res, "files", None):
-                if res.files:
-                    st.caption("Exports:")
-                    for f in res.files:
-                        st.write(f"- {f}")
-
+            if res.files:
+                st.caption("Exports:")
+                for f in res.files:
+                    st.write(str(f))
     else:
         st.info("Nenhum resultado retornado pelo runner.")
