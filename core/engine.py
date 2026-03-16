@@ -12,7 +12,7 @@ load_dotenv()
 def get_database_url() -> str:
     database_url = os.getenv("DATABASE_URL")
     if database_url:
-        return database_url
+        return database_url.strip()
 
     db_user = os.getenv("DB_USER")
     db_password = os.getenv("DB_PASSWORD")
@@ -21,19 +21,33 @@ def get_database_url() -> str:
     db_port = os.getenv("DB_PORT", "5432")
 
     faltando = [
-        k for k, v in {
+        chave
+        for chave, valor in {
             "DB_USER": db_user,
             "DB_PASSWORD": db_password,
             "DB_HOST": db_host,
             "DB_NAME": db_name,
-        }.items() if not v
+        }.items()
+        if not valor
     ]
 
     if faltando:
-        raise RuntimeError("Variáveis de conexão ausentes: " + ", ".join(faltando))
+        raise RuntimeError(
+            "Variáveis de conexão ausentes: " + ", ".join(faltando)
+        )
 
-    return f"postgresql://{db_user}:{db_password}@{db_host}:{db_port}/{db_name}"
+    return (
+        f"postgresql://{db_user}:{db_password}@{db_host}:{db_port}/{db_name}"
+    )
 
 
 def get_engine() -> Engine:
-    return create_engine(get_database_url(), pool_pre_ping=True)
+    database_url = get_database_url()
+
+    return create_engine(
+        database_url,
+        future=True,
+        pool_pre_ping=True,
+        pool_recycle=1800,
+        pool_timeout=30,
+    )

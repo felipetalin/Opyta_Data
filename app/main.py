@@ -1,5 +1,7 @@
 import sys
 from pathlib import Path
+import json
+import os
 
 ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
@@ -89,6 +91,17 @@ else:
     """, unsafe_allow_html=True)
 
 
+def load_users():
+    users_json = os.getenv("OPYTA_USERS_JSON", "{}")
+    try:
+        users = json.loads(users_json)
+        if isinstance(users, dict):
+            return users
+    except Exception:
+        pass
+    return {}
+
+
 def require_login():
     if st.session_state.logged_in:
         return True
@@ -104,13 +117,7 @@ def require_login():
         pwd_input = st.text_input("Senha", type="password")
 
         if st.button("Entrar", use_container_width=True):
-            users = {
-                "ismayllen@opyta.com.br": "123456",
-                "anamoreira@opyta.com.br": "123456",
-                "yurisimoes@opyta.com.br": "123456",
-                "wilder@opyta.com.br": "123456",
-                "felipetalin@opyta.com.br": "FTNblind19!",
-            }
+            users = load_users()
 
             if user_input in users and pwd_input == users[user_input]:
                 st.session_state.logged_in = True

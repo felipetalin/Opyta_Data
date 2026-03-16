@@ -1,12 +1,18 @@
-# --- SCRIPT DE MIGRAÇÃO - ICTIOFAUNA (V6.1 - Engine Central) ---
+# --- SCRIPT DE MIGRAÇÃO - ICTIOFAUNA (V6.2 - Engine Central Padronizado) ---
 
 from __future__ import annotations
 
-import os
 import sys
+from pathlib import Path
+import os
 
 import pandas as pd
 from sqlalchemy import text
+
+# Garante que a pasta raiz do projeto esteja no path
+ROOT = Path(__file__).resolve().parents[1]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
 
 from core.engine import get_engine
 
@@ -22,7 +28,8 @@ def limpar_dados_da_campanha(connection, id_projeto, df_pontos_da_planilha):
     Limpa APENAS os dados de Ictiofauna das campanhas presentes na planilha.
     NÃO apaga pontos de coleta, pois eles podem ser usados por Bentos, Fito, etc.
     """
-    nomes_campanhas_na_planilha = df_pontos_da_planilha["Campanha"].unique().tolist()
+    nomes_campanhas_na_planilha = df_pontos_da_planilha["Campanha"].dropna().unique().tolist()
+
     if not nomes_campanhas_na_planilha:
         print("   -> Nenhuma campanha encontrada na planilha para limpar.")
         return
@@ -89,16 +96,25 @@ def limpar_dados_da_campanha(connection, id_projeto, df_pontos_da_planilha):
 
 def obter_mapas_de_ids(connection):
     print("\n-> Mapeando IDs existentes do banco de dados...")
+
     especies_map = (
-        pd.read_sql("SELECT id_especie, nome_cientifico FROM especies", connection)
+        pd.read_sql(
+            text("SELECT id_especie, nome_cientifico FROM especies"),
+            connection,
+        )
         .set_index("nome_cientifico")["id_especie"]
         .to_dict()
     )
+
     campanhas_map = (
-        pd.read_sql("SELECT id_campanha, nome_campanha FROM campanhas", connection)
+        pd.read_sql(
+            text("SELECT id_campanha, nome_campanha FROM campanhas"),
+            connection,
+        )
         .set_index("nome_campanha")["id_campanha"]
         .to_dict()
     )
+
     return especies_map, campanhas_map
 
 
@@ -108,9 +124,10 @@ def migrar_dados(connection, df_capa, df_pontos, df_esforco, df_resultados):
     print("\n-> Processando Campanhas e Pontos de Coleta...")
     novas_campanhas = [
         {"nome": c}
-        for c in df_pontos["Campanha"].unique()
+        for c in df_pontos["Campanha"].dropna().unique()
         if c not in campanhas_map_inicial
     ]
+
     if novas_campanhas:
         connection.execute(
             text(
@@ -122,8 +139,12 @@ def migrar_dados(connection, df_capa, df_pontos, df_esforco, df_resultados):
             ),
             novas_campanhas,
         )
+
         campanhas_map_atualizado = (
-            pd.read_sql("SELECT id_campanha, nome_campanha FROM campanhas", connection)
+            pd.read_sql(
+                text("SELECT id_campanha, nome_campanha FROM campanhas"),
+                connection,
+            )
             .set_index("nome_campanha")["id_campanha"]
             .to_dict()
         )
@@ -131,6 +152,7 @@ def migrar_dados(connection, df_capa, df_pontos, df_esforco, df_resultados):
         campanhas_map_atualizado = campanhas_map_inicial
 
     codigo_opyta = df_capa.iloc[0]["Codigo_Opyta"]
+
     id_projeto = connection.execute(
         text(
             """
@@ -181,13 +203,16 @@ def migrar_dados(connection, df_capa, df_pontos, df_esforco, df_resultados):
     print("\n-> Processando Esforços de Amostragem...")
     pontos_db_map = (
         pd.read_sql(
-            f"""
-            SELECT pc.id_ponto_coleta, ca.nome_campanha, pc.nome_ponto
-            FROM pontos_coleta pc
-            JOIN campanhas ca ON pc.id_campanha = ca.id_campanha
-            WHERE pc.id_projeto = {id_projeto}
-            """,
+            text(
+                """
+                SELECT pc.id_ponto_coleta, ca.nome_campanha, pc.nome_ponto
+                FROM pontos_coleta pc
+                JOIN campanhas ca ON pc.id_campanha = ca.id_campanha
+                WHERE pc.id_projeto = :id_projeto
+                """
+            ),
             connection,
+            params={"id_projeto": id_projeto},
         )
         .set_index(["nome_campanha", "nome_ponto"])["id_ponto_coleta"]
         .to_dict()
@@ -201,6 +226,7 @@ def migrar_dados(connection, df_capa, df_pontos, df_esforco, df_resultados):
     for _, row in df_esforco_filtrado.iterrows():
         chave_ponto = (row["Campanha"], row["Ponto"])
         id_ponto = pontos_db_map.get(chave_ponto)
+
         if id_ponto:
             esforcos_records.append(
                 {
@@ -241,19 +267,25 @@ def migrar_dados(connection, df_capa, df_pontos, df_esforco, df_resultados):
     print(f"\n-> Processando e agregando Resultados de {GRUPO_BIOLOGICO_ALVO}...")
     esforcos_db_map = (
         pd.read_sql(
-            f"""
-            SELECT
-                e.id_esforco,
-                c.nome_campanha,
-                p.nome_ponto,
-                e.metodo_de_captura
-            FROM esforcos_amostragem e
-            JOIN pontos_coleta p ON e.id_ponto_coleta = p.id_ponto_coleta
-            JOIN campanhas c ON p.id_campanha = c.id_campanha
-            WHERE p.id_projeto = {id_projeto}
-              AND e.grupo_biologico = '{GRUPO_BIOLOGICO_ALVO}'
-            """,
+            text(
+                """
+                SELECT
+                    e.id_esforco,
+                    c.nome_campanha,
+                    p.nome_ponto,
+                    e.metodo_de_captura
+                FROM esforcos_amostragem e
+                JOIN pontos_coleta p ON e.id_ponto_coleta = p.id_ponto_coleta
+                JOIN campanhas c ON p.id_campanha = c.id_campanha
+                WHERE p.id_projeto = :id_projeto
+                  AND e.grupo_biologico = :grupo
+                """
+            ),
             connection,
+            params={
+                "id_projeto": id_projeto,
+                "grupo": GRUPO_BIOLOGICO_ALVO,
+            },
         )
         .set_index(["nome_campanha", "nome_ponto", "metodo_de_captura"])["id_esforco"]
         .to_dict()
@@ -261,7 +293,13 @@ def migrar_dados(connection, df_capa, df_pontos, df_esforco, df_resultados):
 
     df_resultados_agregado = (
         df_resultados.groupby(
-            ["Campanha", "Ponto", "Metodo_de_Captura", "Nome_Cientifico", "Tipo_de_Amostragem"]
+            [
+                "Campanha",
+                "Ponto",
+                "Metodo_de_Captura",
+                "Nome_Cientifico",
+                "Tipo_de_Amostragem",
+            ]
         )
         .agg(
             Numero_de_Individuos=("Numero_de_Individuos", "sum"),
@@ -329,14 +367,12 @@ def main():
     if not os.path.exists(ARQUIVO_EXCEL):
         sys.exit(f"Erro: O arquivo '{ARQUIVO_EXCEL}' não foi encontrado.")
 
+    engine = None
+
     try:
         engine = get_engine()
-    except Exception as e:
-        sys.exit(f"Erro ao conectar ao banco de dados: {e}")
+        print(f"--- INICIANDO MIGRAÇÃO DE {GRUPO_BIOLOGICO_ALVO.upper()}: {ARQUIVO_EXCEL} ---")
 
-    print(f"--- INICIANDO MIGRAÇÃO DE {GRUPO_BIOLOGICO_ALVO.upper()}: {ARQUIVO_EXCEL} ---")
-
-    try:
         xls = pd.ExcelFile(ARQUIVO_EXCEL)
 
         df_capa = pd.read_excel(xls, "Capa_Projeto")
@@ -347,6 +383,7 @@ def main():
         df_pontos["Data"] = pd.to_datetime(
             df_pontos["Data"], dayfirst=True, errors="coerce"
         ).dt.tz_localize(None)
+
         df_pontos["Data"] = df_pontos["Data"].astype(object).where(
             df_pontos["Data"].notnull(), None
         )
@@ -408,7 +445,10 @@ def main():
     except Exception as e:
         print("\n--- ERRO DURANTE A MIGRAÇÃO. A TRANSAÇÃO FOI REVERTIDA (ROLLBACK) ---")
         print(f"   Detalhe do erro: {e}")
-        raise
+        sys.exit(1)
+    finally:
+        if engine is not None:
+            engine.dispose()
 
 
 if __name__ == "__main__":
