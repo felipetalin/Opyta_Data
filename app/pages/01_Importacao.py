@@ -77,6 +77,46 @@ def write_clean_excel(excel_path: Path, cleaned_path: Path) -> int:
 
 
 # ============================================================
+# Ambiente / Secrets
+# ============================================================
+
+def get_runtime_env() -> dict[str, str]:
+    env: dict[str, str] = {}
+
+    database_url = None
+
+    try:
+        database_url = st.secrets["DATABASE_URL"]
+    except Exception:
+        database_url = os.getenv("DATABASE_URL")
+
+    if not database_url:
+        raise RuntimeError(
+            "DATABASE_URL não encontrada. Configure esse secret no Streamlit Cloud."
+        )
+
+    env["DATABASE_URL"] = str(database_url).strip()
+
+    try:
+        supabase_url = st.secrets["SUPABASE_URL"]
+        if supabase_url:
+            env["SUPABASE_URL"] = str(supabase_url).strip()
+    except Exception:
+        if os.getenv("SUPABASE_URL"):
+            env["SUPABASE_URL"] = os.getenv("SUPABASE_URL", "").strip()
+
+    try:
+        supabase_anon_key = st.secrets["SUPABASE_ANON_KEY"]
+        if supabase_anon_key:
+            env["SUPABASE_ANON_KEY"] = str(supabase_anon_key).strip()
+    except Exception:
+        if os.getenv("SUPABASE_ANON_KEY"):
+            env["SUPABASE_ANON_KEY"] = os.getenv("SUPABASE_ANON_KEY", "").strip()
+
+    return env
+
+
+# ============================================================
 # Resumo 2.1 — pós-migração
 # ============================================================
 
@@ -104,136 +144,143 @@ def gerar_resumo_pos_migracao(grupo: str, excel_path: Path):
         for x in df_pontos["Ponto"].dropna().unique().tolist()
     ])
 
-    engine = get_engine()
+    engine = None
 
-    with engine.begin() as conn:
-        id_projeto = conn.execute(
-            text(
-                """
-                SELECT id_projeto
-                FROM projetos
-                WHERE LOWER(TRIM(REPLACE(codigo_interno_opyta, CHR(160), ''))) =
-                      LOWER(TRIM(REPLACE(:c, CHR(160), '')))
-                """
-            ),
-            {"c": codigo},
-        ).scalar()
+    try:
+        engine = get_engine()
 
-        if not id_projeto:
-            st.warning(f"Projeto não encontrado no banco para Código_Opyta = {codigo}")
-            return
-
-        rows_camp = conn.execute(
-            text(
-                """
-                SELECT DISTINCT ca.nome_campanha
-                FROM campanhas ca
-                JOIN pontos_coleta pc ON pc.id_campanha = ca.id_campanha
-                WHERE pc.id_projeto = :idp
-                ORDER BY ca.nome_campanha
-                """
-            ),
-            {"idp": id_projeto},
-        ).fetchall()
-        campanhas_banco = [r[0] for r in rows_camp]
-
-        rows_pontos = conn.execute(
-            text(
-                """
-                SELECT DISTINCT nome_ponto
-                FROM pontos_coleta
-                WHERE id_projeto = :idp
-                ORDER BY nome_ponto
-                """
-            ),
-            {"idp": id_projeto},
-        ).fetchall()
-        pontos_banco = [r[0] for r in rows_pontos]
-
-        c1, c2, c3, c4 = st.columns(4)
-        c1.metric("Projeto", codigo if codigo else "-")
-        c2.metric("Campanhas (Excel)", len(campanhas_excel))
-        c3.metric("Pontos (Excel)", len(pontos_excel))
-        c4.metric("Grupo", grupo)
-
-        with st.expander("Ver escopo do Excel"):
-            st.write("**Campanhas (Excel):**", campanhas_excel)
-            st.write("**Pontos (Excel):**", pontos_excel)
-
-        with st.expander("Ver escopo encontrado no banco"):
-            st.write("**Campanhas (Banco):**", campanhas_banco)
-            st.write("**Pontos (Banco):**", pontos_banco)
-
-        if grupo == "Meio Físico":
-            total_res = conn.execute(
+        with engine.begin() as conn:
+            id_projeto = conn.execute(
                 text(
                     """
-                    SELECT COUNT(*)
-                    FROM resultados_analise ra
-                    JOIN pontos_coleta pc ON pc.id_ponto_coleta = ra.id_ponto_coleta
+                    SELECT id_projeto
+                    FROM projetos
+                    WHERE LOWER(TRIM(REPLACE(codigo_interno_opyta, CHR(160), ''))) =
+                          LOWER(TRIM(REPLACE(:c, CHR(160), '')))
+                    """
+                ),
+                {"c": codigo},
+            ).scalar()
+
+            if not id_projeto:
+                st.warning(f"Projeto não encontrado no banco para Código_Opyta = {codigo}")
+                return
+
+            rows_camp = conn.execute(
+                text(
+                    """
+                    SELECT DISTINCT ca.nome_campanha
+                    FROM campanhas ca
+                    JOIN pontos_coleta pc ON pc.id_campanha = ca.id_campanha
                     WHERE pc.id_projeto = :idp
+                    ORDER BY ca.nome_campanha
                     """
                 ),
                 {"idp": id_projeto},
+            ).fetchall()
+            campanhas_banco = [r[0] for r in rows_camp]
+
+            rows_pontos = conn.execute(
+                text(
+                    """
+                    SELECT DISTINCT nome_ponto
+                    FROM pontos_coleta
+                    WHERE id_projeto = :idp
+                    ORDER BY nome_ponto
+                    """
+                ),
+                {"idp": id_projeto},
+            ).fetchall()
+            pontos_banco = [r[0] for r in rows_pontos]
+
+            c1, c2, c3, c4 = st.columns(4)
+            c1.metric("Projeto", codigo if codigo else "-")
+            c2.metric("Campanhas (Excel)", len(campanhas_excel))
+            c3.metric("Pontos (Excel)", len(pontos_excel))
+            c4.metric("Grupo", grupo)
+
+            with st.expander("Ver escopo do Excel"):
+                st.write("**Campanhas (Excel):**", campanhas_excel)
+                st.write("**Pontos (Excel):**", pontos_excel)
+
+            with st.expander("Ver escopo encontrado no banco"):
+                st.write("**Campanhas (Banco):**", campanhas_banco)
+                st.write("**Pontos (Banco):**", pontos_banco)
+
+            if grupo == "Meio Físico":
+                total_res = conn.execute(
+                    text(
+                        """
+                        SELECT COUNT(*)
+                        FROM resultados_analise ra
+                        JOIN pontos_coleta pc ON pc.id_ponto_coleta = ra.id_ponto_coleta
+                        WHERE pc.id_projeto = :idp
+                        """
+                    ),
+                    {"idp": id_projeto},
+                ).scalar()
+
+                a, b = st.columns(2)
+                a.metric("Status", "OK")
+                b.metric("Resultados (Banco)", int(total_res or 0))
+                return
+
+            tabela_map = {
+                "Ictiofauna": "resultados_ictiofauna",
+                "Bentos": "resultados_zoobentos",
+                "Fitoplâncton": "resultados_fitoplancton",
+                "Zooplâncton": "resultados_zooplancton",
+            }
+
+            grupo_banco_map = {
+                "Ictiofauna": "Ictiofauna",
+                "Bentos": "Zoobentos",
+                "Fitoplâncton": "Fitoplancton",
+                "Zooplâncton": "Zooplancton",
+            }
+
+            tabela = tabela_map.get(grupo)
+            grupo_banco = grupo_banco_map.get(grupo)
+
+            if not tabela or not grupo_banco:
+                st.warning(f"Sem mapeamento de banco para o grupo '{grupo}'.")
+                return
+
+            total_esforcos = conn.execute(
+                text(
+                    """
+                    SELECT COUNT(*)
+                    FROM esforcos_amostragem e
+                    JOIN pontos_coleta pc ON pc.id_ponto_coleta = e.id_ponto_coleta
+                    WHERE pc.id_projeto = :idp
+                      AND e.grupo_biologico = :g
+                    """
+                ),
+                {"idp": id_projeto, "g": grupo_banco},
             ).scalar()
 
-            a, b = st.columns(2)
+            total_res = conn.execute(
+                text(
+                    f"""
+                    SELECT COUNT(*)
+                    FROM {tabela} r
+                    JOIN esforcos_amostragem e ON e.id_esforco = r.id_esforco
+                    JOIN pontos_coleta pc ON pc.id_ponto_coleta = e.id_ponto_coleta
+                    WHERE pc.id_projeto = :idp
+                      AND e.grupo_biologico = :g
+                    """
+                ),
+                {"idp": id_projeto, "g": grupo_banco},
+            ).scalar()
+
+            a, b, c = st.columns(3)
             a.metric("Status", "OK")
-            b.metric("Resultados (Banco)", int(total_res or 0))
-            return
+            b.metric("Esforços (Banco)", int(total_esforcos or 0))
+            c.metric("Resultados (Banco)", int(total_res or 0))
 
-        tabela_map = {
-            "Ictiofauna": "resultados_ictiofauna",
-            "Bentos": "resultados_zoobentos",
-            "Fitoplâncton": "resultados_fitoplancton",
-            "Zooplâncton": "resultados_zooplancton",
-        }
-
-        grupo_banco_map = {
-            "Ictiofauna": "Ictiofauna",
-            "Bentos": "Zoobentos",
-            "Fitoplâncton": "Fitoplancton",
-            "Zooplâncton": "Zooplancton",
-        }
-
-        tabela = tabela_map.get(grupo)
-        grupo_banco = grupo_banco_map.get(grupo)
-
-        if not tabela or not grupo_banco:
-            st.warning(f"Sem mapeamento de banco para o grupo '{grupo}'.")
-            return
-
-        total_esforcos = conn.execute(
-            text(
-                """
-                SELECT COUNT(*)
-                FROM esforcos_amostragem e
-                JOIN pontos_coleta pc ON pc.id_ponto_coleta = e.id_ponto_coleta
-                WHERE pc.id_projeto = :idp
-                  AND e.grupo_biologico = :g
-                """
-            ),
-            {"idp": id_projeto, "g": grupo_banco},
-        ).scalar()
-
-        total_res = conn.execute(
-            text(
-                f"""
-                SELECT COUNT(*)
-                FROM {tabela} r
-                JOIN esforcos_amostragem e ON e.id_esforco = r.id_esforco
-                JOIN pontos_coleta pc ON pc.id_ponto_coleta = e.id_ponto_coleta
-                WHERE pc.id_projeto = :idp
-                  AND e.grupo_biologico = :g
-                """
-            ),
-            {"idp": id_projeto, "g": grupo_banco},
-        ).scalar()
-
-        a, b, c = st.columns(3)
-        a.metric("Status", "OK")
-        b.metric("Esforços (Banco)", int(total_esforcos or 0))
-        c.metric("Resultados (Banco)", int(total_res or 0))
+    finally:
+        if engine is not None:
+            engine.dispose()
 
 
 # ============================================================
@@ -312,22 +359,11 @@ can_migrate = bool(st.session_state.get("validated_ok", False)) and excel_para_m
 if st.button("Migrar", disabled=not can_migrate):
     script_abs = (PROJECT_ROOT / spec.script).resolve()
 
-    extra_env = {}
-
     try:
-        extra_env["DATABASE_URL"] = st.secrets["DATABASE_URL"]
-    except Exception:
-        if os.getenv("DATABASE_URL"):
-            extra_env["DATABASE_URL"] = os.getenv("DATABASE_URL")
-
-    try:
-        extra_env["SUPABASE_URL"] = st.secrets["SUPABASE_URL"]
-        extra_env["SUPABASE_ANON_KEY"] = st.secrets["SUPABASE_ANON_KEY"]
-    except Exception:
-        if os.getenv("SUPABASE_URL"):
-            extra_env["SUPABASE_URL"] = os.getenv("SUPABASE_URL")
-        if os.getenv("SUPABASE_ANON_KEY"):
-            extra_env["SUPABASE_ANON_KEY"] = os.getenv("SUPABASE_ANON_KEY")
+        extra_env = get_runtime_env()
+    except Exception as e:
+        st.error(f"Falha ao preparar ambiente da migração: {e}")
+        st.stop()
 
     res = run_python_script(
         script_path=str(script_abs),
