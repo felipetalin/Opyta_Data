@@ -1,4 +1,4 @@
-# --- SCRIPT DE MIGRAÇÃO - ICTIOFAUNA (V6.2 - Engine Central Padronizado) ---
+# --- SCRIPT DE MIGRAÇÃO - ICTIOFAUNA (V6.3 - Debug de Ambiente no Cloud) ---
 
 from __future__ import annotations
 
@@ -370,6 +370,10 @@ def main():
     engine = None
 
     try:
+        print("DEBUG SCRIPT ICTIO V3")
+        print("DEBUG DATABASE_URL EXISTS:", bool(os.getenv("DATABASE_URL")))
+        print("DEBUG DB_HOST:", os.getenv("DB_HOST"))
+
         engine = get_engine()
         print(f"--- INICIANDO MIGRAÇÃO DE {GRUPO_BIOLOGICO_ALVO.upper()}: {ARQUIVO_EXCEL} ---")
 
