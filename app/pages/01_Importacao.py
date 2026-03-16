@@ -20,6 +20,7 @@ if "logged_in" not in st.session_state or not st.session_state.logged_in:
     st.stop()
 
 st.title("01 — Importação")
+st.info("DEBUG IMPORTACAO V2")
 
 # Raiz do projeto: .../Opyta_Data
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
