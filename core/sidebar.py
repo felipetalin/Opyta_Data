@@ -1,20 +1,20 @@
 import streamlit as st
 
 def render_sidebar():
-
     with st.sidebar:
+        st.image("app/assets/logo.png", use_container_width=True)
+        st.markdown("### Navegação")
+        st.success(f"Usuário: {st.session_state.get('logged_user', 'logado')}")
 
-        st.markdown("## 🌿 OPYTA DATA")
+        st.page_link("main.py", label="🏠 Início")
+        st.page_link("pages/00_Base_Mestre.py", label="📚 Base Mestre")
+        st.page_link("pages/01_Importacao.py", label="📥 Importação")
+        st.page_link("pages/02_Consolidacao.py", label="⚙️ Consolidação")
+        st.page_link("pages/03_Analises.py", label="📊 Análises")
 
-        st.markdown("---")
+        st.divider()
 
-        st.page_link("app/main.py", label="🏠 Início")
-        st.page_link("app/pages/01_dashboard.py", label="📊 Dashboard")
-        st.page_link("app/pages/02_importacao.py", label="📥 Importação")
-        st.page_link("app/pages/03_analises.py", label="📈 Análises")
-
-        st.markdown("---")
-
-        if st.button("Sair"):
+        if st.button("🚪 Sair", use_container_width=True):
             st.session_state.logged_in = False
+            st.session_state.logged_user = None
             st.rerun()
