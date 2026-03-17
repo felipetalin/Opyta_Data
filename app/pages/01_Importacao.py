@@ -1,12 +1,32 @@
 from __future__ import annotations
 
+import streamlit as st
+
+# ------------------------------------------------
+# Verificação de login (sempre primeiro)
+# ------------------------------------------------
+
+if not st.session_state.get("logged_in"):
+    st.switch_page("app/main.py")
+
+# ------------------------------------------------
+# Sidebar
+# ------------------------------------------------
+
+from core.sidebar import render_sidebar
+
+render_sidebar()
+
+# ------------------------------------------------
+# Imports do sistema
+# ------------------------------------------------
+
 import os
 import re
 import unicodedata
 from pathlib import Path
 
 import pandas as pd
-import streamlit as st
 from sqlalchemy import text
 
 from core.engine import get_engine
@@ -15,9 +35,18 @@ from runners.script_runner import run_python_script
 from validators.registry import VALIDATORS
 
 
+# ------------------------------------------------
+# Segurança extra
+# ------------------------------------------------
+
 if "logged_in" not in st.session_state or not st.session_state.logged_in:
     st.warning("Faça login para acessar esta página.")
     st.stop()
+
+
+# ------------------------------------------------
+# Página
+# ------------------------------------------------
 
 st.title("01 — Importação")
 st.info("DEBUG IMPORTACAO V2")
@@ -27,7 +56,6 @@ PROJECT_ROOT = Path(__file__).resolve().parents[2]
 
 RUNTIME_ROOT = PROJECT_ROOT / "runtime" / "importacao"
 RUNTIME_ROOT.mkdir(parents=True, exist_ok=True)
-
 
 # ============================================================
 # Normalização / Correção segura (automática)
