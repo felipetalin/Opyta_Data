@@ -38,7 +38,7 @@ header {visibility: hidden;}
 }
 
 .block-container {
-    padding-top: 1.8rem;
+    padding-top: 1.4rem;
     padding-bottom: 1.5rem;
 }
 
@@ -109,14 +109,28 @@ input {
     background: linear-gradient(135deg, #ffffff 0%, #f4f7ef 100%);
     border: 1px solid #dfe5d2;
     border-radius: 22px;
-    padding: 1.4rem 1.6rem;
-    margin-bottom: 1.4rem;
+    padding: 1rem 1.4rem;
+    margin-bottom: 1.2rem;
     box-shadow: 0 4px 14px rgba(0,0,0,0.04);
 }
 
 .opyta-sub {
     color: #5f6b46;
-    margin-top: 0.3rem;
+    margin-top: 0.25rem;
+    margin-bottom: 0;
+}
+
+div[data-testid="stSidebar"] div.stButton > button {
+    background: #ffffff !important;
+    color: #6f4b2a !important;
+    border: 1px solid #d8d8cf !important;
+    border-radius: 12px !important;
+    font-weight: 500 !important;
+}
+
+div[data-testid="stSidebar"] div.stButton > button:hover {
+    background: #f7f7f2 !important;
+    color: #6f4b2a !important;
 }
 </style>
 """, unsafe_allow_html=True)
@@ -176,9 +190,8 @@ render_sidebar()
 
 st.markdown("""
 <div class="opyta-hero">
-    <img src="app/static" style="display:none;">
     <h1 style="margin-bottom:0;">OPYTA DATA</h1>
-    <p class="opyta-sub">Plataforma de dados e análises ambientais</p>
+    <p class="opyta-sub">Centralize importação, consolidação e análises ambientais em um único fluxo.</p>
 </div>
 """, unsafe_allow_html=True)
 
