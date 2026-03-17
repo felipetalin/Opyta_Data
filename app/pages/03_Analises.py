@@ -2,6 +2,25 @@ from __future__ import annotations
 
 import streamlit as st
 
+# ------------------------------------------------
+# Verificação de login
+# ------------------------------------------------
+
+if not st.session_state.get("logged_in"):
+    st.switch_page("main.py")
+
+# ------------------------------------------------
+# Sidebar
+# ------------------------------------------------
+
+from core.sidebar import render_sidebar
+render_sidebar()
+
+
+from __future__ import annotations
+
+import streamlit as st
+
 if "logged_in" not in st.session_state or not st.session_state.logged_in:
     st.warning("Faça login para acessar esta página.")
     st.stop()
