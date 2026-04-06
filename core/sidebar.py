@@ -33,6 +33,7 @@ def render_sidebar():
         st.page_link("pages/00_Base_Mestre.py", label="📚 Base Mestre")
         st.page_link("pages/01_Importacao.py", label="📥 Importação")
         st.page_link("pages/02_Consolidacao.py", label="⚙️ Consolidação")
+        st.page_link("pages/04_Exportacao.py", label="📤 Exportação")
 
         st.markdown(
             "<div style='font-size:0.82rem; font-weight:700; color:#6a744f; margin:14px 0 6px 2px;'>RESULTADOS</div>",
