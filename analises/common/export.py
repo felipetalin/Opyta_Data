@@ -17,6 +17,15 @@ def export_df_xlsx(df: pd.DataFrame, pasta: Path, nome: str) -> Path:
     return path
 
 
+def export_dfs_xlsx(dfs: dict[str, pd.DataFrame], pasta: Path, nome: str) -> Path:
+    _mkdir(pasta)
+    path = pasta / nome
+    with pd.ExcelWriter(path, engine="openpyxl") as writer:
+        for aba, df in dfs.items():
+            df.to_excel(writer, sheet_name=aba, index=False)
+    return path
+
+
 def export_plotly_png(fig: Any, pasta: Path, nome: str) -> Path:
     _mkdir(pasta)
     path = pasta / nome
