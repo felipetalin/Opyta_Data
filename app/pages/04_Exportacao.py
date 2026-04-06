@@ -62,8 +62,8 @@ def listar_campanhas(projeto: str, grupo: str) -> list[str]:
     sql = """
         SELECT DISTINCT nome_campanha
         FROM public.biota_analise_consolidada
-        WHERE nome_projeto = :projeto
-          AND grupo_biologico = :grupo
+        WHERE nome_projeto = %(projeto)s
+          AND grupo_biologico = %(grupo)s
           AND nome_campanha IS NOT NULL
         ORDER BY 1
     """
@@ -79,13 +79,13 @@ def carregar_dados(projeto: str, grupo: str, campanha: str) -> pd.DataFrame:
     params: dict[str, str] = {}
 
     if projeto:
-        clauses.append("nome_projeto = :projeto")
+        clauses.append("nome_projeto = %(projeto)s")
         params["projeto"] = projeto
     if grupo:
-        clauses.append("grupo_biologico = :grupo")
+        clauses.append("grupo_biologico = %(grupo)s")
         params["grupo"] = grupo
     if campanha and campanha != "(todas)":
-        clauses.append("nome_campanha = :campanha")
+        clauses.append("nome_campanha = %(campanha)s")
         params["campanha"] = campanha
 
     query = "SELECT * FROM public.biota_analise_consolidada"

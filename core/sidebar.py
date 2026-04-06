@@ -39,7 +39,6 @@ def render_sidebar():
             "<div style='font-size:0.82rem; font-weight:700; color:#6a744f; margin:14px 0 6px 2px;'>RESULTADOS</div>",
             unsafe_allow_html=True,
         )
-        st.page_link("pages/04_Exportacao.py", label="📤 Exportação")
 
         st.divider()
 
