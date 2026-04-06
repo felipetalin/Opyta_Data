@@ -1,6 +1,15 @@
 from __future__ import annotations
 
+import re
+from datetime import datetime
+from pathlib import Path
+
 import streamlit as st
+
+from core.sidebar import render_sidebar
+from core.supabase_client import get_supabase
+from runners.script_runner import run_python_script
+from runners.registry import ACTIONS
 
 # ------------------------------------------------
 # Verificação de login
@@ -13,20 +22,12 @@ if not st.session_state.get("logged_in"):
 # Sidebar
 # ------------------------------------------------
 
-from core.sidebar import render_sidebar
 render_sidebar()
-
-
-import streamlit as st
 
 # 🔐 Proteção de login
 if "logged_in" not in st.session_state or not st.session_state.logged_in:
     st.warning("Faça login para acessar esta página.")
     st.stop()
-
-from pathlib import Path
-from datetime import datetime
-import re
 
 from core.supabase_client import get_supabase
 from runners.script_runner import run_python_script
