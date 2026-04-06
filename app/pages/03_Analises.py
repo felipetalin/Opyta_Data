@@ -28,11 +28,6 @@ if "logged_in" not in st.session_state or not st.session_state.logged_in:
 
 render_sidebar()
 
-from core.engine import get_engine
-from analises.common.base import RunContext
-from analises.common.theme import get_theme, ordem_campanhas_padrao
-from analises.common.ictio.runner import run as run_ictio
-
 
 # =========================
 # PAGE CONFIG
