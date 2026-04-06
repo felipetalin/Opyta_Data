@@ -242,6 +242,28 @@ with col4:
     """, unsafe_allow_html=True)
     if st.button("Abrir Análises", use_container_width=True, key="go_analises"):
         st.switch_page("pages/03_Analises.py")
+st.write("")
+col1, col2 = st.columns(2, gap="large")
+
+with col1:
+    st.markdown("""
+    <div class="opyta-card">
+        <div class="opyta-tag">Exportação</div>
+        <h3>📤 Exportação</h3>
+        <p>Exporte dados consolidados para CSV ou Excel com filtros de projeto e grupo.</p>
+    </div>
+    """, unsafe_allow_html=True)
+    if st.button("Abrir Exportação", use_container_width=True, key="go_export"):
+        st.switch_page("pages/04_Exportacao.py")
+
+with col2:
+    st.markdown("""
+    <div class="opyta-card">
+        <div class="opyta-tag">Em breve</div>
+        <h3>🔜 Mais recursos</h3>
+        <p>Novas funcionalidades serão adicionadas ao fluxo de análise e export.</p>
+    </div>
+    """, unsafe_allow_html=True)
 
 st.markdown("---")
 st.caption(f"Usuário conectado: {st.session_state.get('logged_user', '—')}")
