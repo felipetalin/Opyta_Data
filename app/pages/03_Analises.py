@@ -1,6 +1,15 @@
 from __future__ import annotations
 
 import streamlit as st
+from pathlib import Path
+
+import pandas as pd
+
+from core.engine import get_engine
+from core.sidebar import render_sidebar
+from analises.common.base import RunContext
+from analises.common.theme import get_theme, ordem_campanhas_padrao
+from analises.common.ictio.runner import run as run_ictio
 
 # ------------------------------------------------
 # Verificação de login
@@ -9,25 +18,15 @@ import streamlit as st
 if not st.session_state.get("logged_in"):
     st.switch_page("main.py")
 
-# ------------------------------------------------
-# Sidebar
-# ------------------------------------------------
-
-from core.sidebar import render_sidebar
-render_sidebar()
-
-
-from __future__ import annotations
-
-import streamlit as st
-
 if "logged_in" not in st.session_state or not st.session_state.logged_in:
     st.warning("Faça login para acessar esta página.")
     st.stop()
 
-from pathlib import Path
+# ------------------------------------------------
+# Sidebar
+# ------------------------------------------------
 
-import pandas as pd
+render_sidebar()
 
 from core.engine import get_engine
 from analises.common.base import RunContext
