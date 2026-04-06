@@ -29,11 +29,6 @@ if "logged_in" not in st.session_state or not st.session_state.logged_in:
     st.warning("Faça login para acessar esta página.")
     st.stop()
 
-from core.supabase_client import get_supabase
-from runners.script_runner import run_python_script
-from runners.registry import ACTIONS
-
-
 st.title("00 — Base Mestre (Espécies e Parâmetros)")
 
 # Raiz do projeto: .../Opyta_Data
