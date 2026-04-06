@@ -205,7 +205,7 @@ if projeto and not df_base.empty:
         projeto=projeto,
         grupo=grupo,
         campanha=campanha,
-        nome_ponto=None,
+        ponto=None,
         pasta_saida=Path(pasta_saida),
         tema=tema,
         exportar_arquivos=exportar_arquivos,
