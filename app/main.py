@@ -242,6 +242,27 @@ with col4:
     """, unsafe_allow_html=True)
     if st.button("Abrir Exportação", use_container_width=True, key="go_export"):
         st.switch_page("pages/04_Exportacao.py")
+st.write("")
+col5, col6 = st.columns(2, gap="large")
 
+with col5:
+    st.markdown("""
+    <div class="opyta-card">
+        <div class="opyta-tag">Análises</div>
+        <h3>📊 Análises Ecológicas</h3>
+        <p>Execute análises taxonômicas, diversidade e índices específicos por grupo.</p>
+    </div>
+    """, unsafe_allow_html=True)
+    if st.button("Abrir Análises", use_container_width=True, key="go_analises"):
+        st.switch_page("pages/03_Analises.py")
+
+with col6:
+    st.markdown("""
+    <div class="opyta-card">
+        <div class="opyta-tag">Em breve</div>
+        <h3>🔜 Relatórios</h3>
+        <p>Geração automática de relatórios técnicos e apresentações.</p>
+    </div>
+    """, unsafe_allow_html=True)
 st.markdown("---")
 st.caption(f"Usuário conectado: {st.session_state.get('logged_user', '—')}")
