@@ -22,7 +22,11 @@ if "logged_in" not in st.session_state or not st.session_state.logged_in:
     st.stop()
 
 st.title("04 — Exportação")
-st.info("Exporte dados do banco em dois formatos: Dados Brutos ou Darwin Core (padrão internacional).")
+
+st.markdown(
+    "📌 **Etapa final:** Exporte dados consolidados em dois formatos: Dados Brutos ou Darwin Core (padrão internacional).\n"
+    "✅ Selecione projeto, grupo e filtros, depois clique em Carregar e Exportar."
+)
 
 EXPORT_DIR = Path("exports")
 EXPORT_DIR.mkdir(parents=True, exist_ok=True)

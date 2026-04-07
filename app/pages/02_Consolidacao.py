@@ -29,6 +29,11 @@ if "logged_in" not in st.session_state or not st.session_state.logged_in:
 
 st.title("02 — Consolidação")
 
+st.markdown(
+    "📌 **Etapa obrigatória:** Processa e consolida todos os dados importados em uma única tabela de análise.\n"
+    "⚠️ Execute esta etapa após cada importação antes de fazer análises."
+)
+
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 
 supabase = get_supabase()

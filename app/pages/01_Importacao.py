@@ -49,7 +49,11 @@ if "logged_in" not in st.session_state or not st.session_state.logged_in:
 # ------------------------------------------------
 
 st.title("01 — Importação")
-st.info("DEBUG IMPORTACAO V2")
+
+st.markdown(
+    "📌 **Fluxo:** Upload do arquivo → Validação automática → Migração para o banco.\n"
+    "✅ A normalização de dados é feita automaticamente. Após importar, passe para Consolidação."
+)
 
 # Raiz do projeto: .../Opyta_Data
 PROJECT_ROOT = Path(__file__).resolve().parents[2]

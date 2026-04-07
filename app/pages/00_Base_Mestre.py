@@ -31,6 +31,11 @@ if "logged_in" not in st.session_state or not st.session_state.logged_in:
 
 st.title("00 — Base Mestre (Espécies e Parâmetros)")
 
+st.markdown(
+    "📌 **Fluxo:** Escolha o grupo → Selecione a ação (cadastrar/atualizar) → Execute o script.\n"
+    "⚠️ Esta é a primeira etapa: organize seus dados de referência antes de importar."
+)
+
 # Raiz do projeto: .../Opyta_Data
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 

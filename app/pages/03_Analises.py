@@ -41,9 +41,10 @@ if "logged_in" not in st.session_state or not st.session_state.logged_in:
 render_sidebar()
 
 st.title("03 - Análises")
+
 st.markdown(
-    "Use o painel de navegação à esquerda para alternar entre as etapas do fluxo. "
-    "As configurações de análise foram movidas para esta página para maior clareza."
+    "📌 **Filtros:** Selecione Projeto → Grupo → Campanha (opcional). Marque os blocos de análise desejados.\n"
+    "🎯 Configure tema e opções na coluna direita, depois clique em Executar."
 )
 
 # =========================
@@ -254,96 +255,4 @@ if st.session_state.get("results_executed", False):
                         st.caption("Arquivos exportados:")
                         for f in res["files"]:
                             st.write(f"- {Path(f).name}")
-else:
-    with results_tab:
-        if projeto and not df_base.empty:
-            st.info("Clique em Executar na aba Configuração para gerar os resultados.")
-df_base = pd.DataFrame()
-if projeto:
-    with st.spinner("Carregando dados do banco..."):
-        df_base = carregar_df_base(projeto, grupo)
 
-    if df_base.empty:
-        st.warning("Nenhum dado encontrado para esse Projeto + Grupo.")
-    else:
-        with st.container():
-            total_registros = len(df_base)
-            total_campanhas = df_base["nome_campanha"].nunique() if "nome_campanha" in df_base.columns else 0
-            total_pontos = df_base["nome_ponto"].nunique() if "nome_ponto" in df_base.columns else 0
-
-            col1, col2, col3, col4 = st.columns(4, gap="large")
-            col1.metric("Registros", f"{total_registros:,}")
-            col2.metric("Campanhas", total_campanhas)
-            col3.metric("Pontos", total_pontos)
-            col4.metric("Grupo", grupo)
-
-        with st.expander("Ver dados de entrada", expanded=False):
-            st.dataframe(df_base.head(50), use_container_width=True)
-
-# =========================
-# EXECUÇÃO MODULAR
-# =========================
-if projeto and not df_base.empty:
-    df_trabalho = df_base.copy()
-    if campanha and campanha != "(todas)" and "nome_campanha" in df_trabalho.columns:
-        df_trabalho = df_trabalho[
-            df_trabalho["nome_campanha"].astype(str).str.strip() == str(campanha).strip()
-        ].copy()
-
-    ordem = ordem_campanhas_padrao(grupo)
-    if ordem is None and "nome_campanha" in df_trabalho.columns:
-        ordem = sorted(df_trabalho["nome_campanha"].dropna().astype(str).unique().tolist())
-
-    ctx = RunContext(
-        projeto=projeto,
-        grupo=grupo,
-        campanha=campanha,
-        ponto=None,
-        pasta_saida=Path(pasta_saida),
-        tema=tema,
-        exportar_arquivos=exportar_arquivos,
-        ordem_campanhas=ordem,
-    )
-
-    executar = st.button("🚀 Executar análises", use_container_width=True)
-    st.caption("Clique apenas uma vez e aguarde a conclusão dos blocos selecionados.")
-
-    if executar:
-        st.markdown("---")
-
-        results = []
-        if exec_composicao:
-            with st.spinner("Gerando composição taxonômica..."):
-                results.append(analisar_composicao_taxonomica(df_trabalho, ctx))
-        if exec_riqueza_ponto:
-            with st.spinner("Gerando riqueza por ponto..."):
-                results.append(analisar_riqueza_por_ponto(df_trabalho, ctx))
-        if exec_riqueza_filo:
-            with st.spinner("Gerando riqueza por filo..."):
-                results.append(analisar_riqueza_por_filo(df_trabalho, ctx))
-        if exec_diversidade:
-            with st.spinner("Gerando diversidade alfa..."):
-                results.append(analisar_diversidade_alfa(df_trabalho, ctx))
-        if exec_bmwp and grupo.lower() == "zoobentos":
-            with st.spinner("Gerando BMWP..."):
-                results.append(analisar_bmwp_zoobentos(df_trabalho, ctx))
-
-        if not results:
-            st.warning("Nenhum bloco de análise foi selecionado. Marque ao menos uma opção na barra lateral.")
-        else:
-            _ = get_theme(tema)
-            for idx, res in enumerate(results, start=1):
-                with st.expander(f"{idx:02d} • {res['title']}", expanded=True):
-                    if not res["ok"]:
-                        st.error(res["error"] or "Erro desconhecido")
-                        continue
-                    if res["df"] is not None and not res["df"].empty:
-                        st.dataframe(res["df"], use_container_width=True)
-                    if res["fig"] is not None:
-                        st.plotly_chart(res["fig"], use_container_width=True)
-                    if res.get("files"):
-                        st.caption("Arquivos exportados:")
-                        for f in res["files"]:
-                            st.write(f"- {Path(f).name}")
-else:
-    st.info("Selecione um projeto e grupo para começar as análises.")
