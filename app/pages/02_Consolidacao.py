@@ -30,8 +30,12 @@ if "logged_in" not in st.session_state or not st.session_state.logged_in:
 st.title("02 — Consolidação")
 
 st.markdown(
-    "📌 **Etapa obrigatória:** Processa e consolida todos os dados importados em uma única tabela de análise.\n"
-    "⚠️ Execute esta etapa após cada importação antes de fazer análises."
+    "📌 **Etapa 3: Consolidação** | Processamento (⚠️ Obrigatória)\n"
+    "\n"
+    "**Passos:**\n"
+    "1. Selecione grupo  \n"
+    "2. Clique em Consolidar  \n"
+    "3. Aguarde → Dados prontos para análise"
 )
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]

@@ -24,8 +24,12 @@ if "logged_in" not in st.session_state or not st.session_state.logged_in:
 st.title("04 — Exportação")
 
 st.markdown(
-    "📌 **Etapa final:** Exporte dados consolidados em dois formatos: Dados Brutos ou Darwin Core (padrão internacional).\n"
-    "✅ Selecione projeto, grupo e filtros, depois clique em Carregar e Exportar."
+    "📌 **Etapa 5: Exportação** | Download dos resultados\n"
+    "\n"
+    "**Passos:**\n"
+    "1. Selecione projeto, grupo e filtros  \n"
+    "2. Clique em Carregar Dados  \n"
+    "3. Escolha formato (CSV ou Darwin Core) e exporte"
 )
 
 EXPORT_DIR = Path("exports")

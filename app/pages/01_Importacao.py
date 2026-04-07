@@ -51,8 +51,12 @@ if "logged_in" not in st.session_state or not st.session_state.logged_in:
 st.title("01 — Importação")
 
 st.markdown(
-    "📌 **Fluxo:** Upload do arquivo → Validação automática → Migração para o banco.\n"
-    "✅ A normalização de dados é feita automaticamente. Após importar, passe para Consolidação."
+    "📌 **Etapa 2: Importação** | Entrada de dados\n"
+    "\n"
+    "**Passos:**\n"
+    "1. Selecione grupo e faça upload do arquivo  \n"
+    "2. Validação automática de formato e dados  \n"
+    "3. Clique em Migrar → ✅ Próxima etapa: Consolidação"
 )
 
 # Raiz do projeto: .../Opyta_Data

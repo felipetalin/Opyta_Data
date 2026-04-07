@@ -40,11 +40,15 @@ if "logged_in" not in st.session_state or not st.session_state.logged_in:
 
 render_sidebar()
 
-st.title("03 - Análises")
+st.title("03 — Análises")
 
 st.markdown(
-    "📌 **Filtros:** Selecione Projeto → Grupo → Campanha (opcional). Marque os blocos de análise desejados.\n"
-    "🎯 Configure tema e opções na coluna direita, depois clique em Executar."
+    "📌 **Etapa 4: Análises Ecológicas** | Cálculos e métricas\n"
+    "\n"
+    "**Passos:**\n"
+    "1. Selecione Projeto → Grupo → Campanha (opcional)  \n"
+    "2. Marque blocos de análise desejados  \n"
+    "3. Clique em Executar → 📊 Visualize resultados"
 )
 
 # =========================

@@ -29,11 +29,15 @@ if "logged_in" not in st.session_state or not st.session_state.logged_in:
     st.warning("Faça login para acessar esta página.")
     st.stop()
 
-st.title("00 — Base Mestre (Espécies e Parâmetros)")
+st.title("00 — Base Mestre")
 
 st.markdown(
-    "📌 **Fluxo:** Escolha o grupo → Selecione a ação (cadastrar/atualizar) → Execute o script.\n"
-    "⚠️ Esta é a primeira etapa: organize seus dados de referência antes de importar."
+    "📌 **Etapa 1: Base Mestre** | Cadastro de referência\n"
+    "\n"
+    "**Passos:**\n"
+    "1. Escolha o grupo (Avifauna, Ictio, Zooplâncton, etc)  \n"
+    "2. Selecione a ação (Cadastrar ou Atualizar)  \n"
+    "3. Execute o script → ⚠️ Etapa obrigatória antes de importar"
 )
 
 # Raiz do projeto: .../Opyta_Data

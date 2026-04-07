@@ -196,6 +196,11 @@ st.markdown("""
 </div>
 """, unsafe_allow_html=True)
 
+st.markdown(
+    "📌 **Fluxo completo:** Base Mestre → Importação → Consolidação → Análises → Exportação\n"
+    "Cada etapa prepara dados para a próxima. Comece cadastrando sua referência, depois importe e analise."
+)
+
 col1, col2 = st.columns(2, gap="large")
 
 with col1:
