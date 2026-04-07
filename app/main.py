@@ -35,6 +35,7 @@ header {visibility: hidden;}
 [data-testid="stSidebar"] {
     background: #eef1e6;
     border-right: 1px solid #dfe5d2;
+    width: 240px !important;
 }
 
 .block-container {
@@ -235,19 +236,6 @@ with col3:
 with col4:
     st.markdown("""
     <div class="opyta-card">
-        <div class="opyta-tag">Resultados</div>
-        <h3>� Exportação</h3>
-        <p>Exporte dados consolidados para CSV ou Excel com filtros de projeto e grupo.</p>
-    </div>
-    """, unsafe_allow_html=True)
-    if st.button("Abrir Exportação", use_container_width=True, key="go_export"):
-        st.switch_page("pages/04_Exportacao.py")
-st.write("")
-col5, col6 = st.columns(2, gap="large")
-
-with col5:
-    st.markdown("""
-    <div class="opyta-card">
         <div class="opyta-tag">Análises</div>
         <h3>📊 Análises Ecológicas</h3>
         <p>Execute análises taxonômicas, diversidade e índices específicos por grupo.</p>
@@ -255,6 +243,19 @@ with col5:
     """, unsafe_allow_html=True)
     if st.button("Abrir Análises", use_container_width=True, key="go_analises"):
         st.switch_page("pages/03_Analises.py")
+st.write("")
+col5, col6 = st.columns(2, gap="large")
+
+with col5:
+    st.markdown("""
+    <div class="opyta-card">
+        <div class="opyta-tag">Saída</div>
+        <h3>📤 Exportação</h3>
+        <p>Exporte dados consolidados para CSV ou Excel com filtros de projeto e grupo.</p>
+    </div>
+    """, unsafe_allow_html=True)
+    if st.button("Abrir Exportação", use_container_width=True, key="go_export"):
+        st.switch_page("pages/04_Exportacao.py")
 
 with col6:
     st.markdown("""

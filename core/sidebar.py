@@ -26,20 +26,19 @@ def render_sidebar():
         )
 
         st.markdown(
-            "<div style='font-size:0.82rem; font-weight:700; color:#6a744f; margin:8px 0 6px 2px;'>DADOS</div>",
+            "<div style='font-size:0.82rem; font-weight:700; color:#6a744f; margin:12px 0 8px 2px;'>DADOS</div>",
             unsafe_allow_html=True,
         )
         st.page_link("main.py", label="🏠 Início")
         st.page_link("pages/00_Base_Mestre.py", label="📚 Base Mestre")
         st.page_link("pages/01_Importacao.py", label="📥 Importação")
         st.page_link("pages/02_Consolidacao.py", label="⚙️ Consolidação")
-        st.page_link("pages/04_Exportacao.py", label="📤 Exportação")
+        st.page_link("pages/03_Analises.py", label="📊 Análises")
 
         st.markdown(
-            "<div style='font-size:0.82rem; font-weight:700; color:#6a744f; margin:14px 0 6px 2px;'>RESULTADOS</div>",
+            "<div style='font-size:0.82rem; font-weight:700; color:#6a744f; margin:16px 0 8px 2px;'>SAÍDA</div>",
             unsafe_allow_html=True,
         )
-        st.page_link("pages/03_Analises.py", label="📊 Análises")
         st.page_link("pages/04_Exportacao.py", label="📤 Exportação")
 
         st.divider()

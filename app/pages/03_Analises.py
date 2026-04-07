@@ -14,8 +14,14 @@ from analises.common.analises import (
     analisar_riqueza_por_ponto,
     analisar_riqueza_por_filo,
     analisar_diversidade_alfa,
-    analisar_bmwp_zoobentos
+    analisar_bmwp_zoobentos,
 )
+
+# ------------------------------------------------
+# PAGE CONFIG
+# ------------------------------------------------
+
+st.set_page_config(page_title="03 - Análises", layout="wide")
 
 # ------------------------------------------------
 # Verificação de login
@@ -34,12 +40,11 @@ if "logged_in" not in st.session_state or not st.session_state.logged_in:
 
 render_sidebar()
 
-# =========================
-# PAGE CONFIG
-# =========================
-st.set_page_config(page_title="03 - Análises", layout="wide")
 st.title("03 - Análises")
-st.info("Selecione filtros e execute análises ecológicas. Use os controles para ativar/desativar blocos específicos.")
+st.markdown(
+    "Use o painel de navegação à esquerda para alternar entre as etapas do fluxo. "
+    "As configurações de análise foram movidas para esta página para maior clareza."
+)
 
 # =========================
 # QUERIES AUXILIARES
@@ -89,117 +94,115 @@ def carregar_df_base(projeto: str, grupo: str) -> pd.DataFrame:
 
 
 # =========================
-# SIDEBAR (FILTROS)
+# CONFIGURAÇÕES DE ANÁLISE
 # =========================
-st.sidebar.header("Filtros")
 
-busca_proj = st.sidebar.text_input("Buscar projeto", value="").strip().lower()
-projetos = listar_projetos()
-if busca_proj:
-    projetos = [p for p in projetos if busca_proj in p.lower()]
-
-projeto = st.sidebar.selectbox(
-    "Projeto (nome_projeto)",
-    options=[""] + projetos,
-    index=0
+st.markdown(
+    "### Fluxo de Análises"
+    "\n\n1. Selecione seu projeto e grupo."
+    "\n2. Ajuste opções e blocos de análise.&nbsp;"
+    "\n3. Clique em Executar e veja os resultados no painel abaixo."
 )
 
-grupo = st.sidebar.selectbox(
-    "Grupo (grupo_biologico)",
-    options=["Ictiofauna", "Zoobentos", "Fitoplancton", "Zooplancton", "Meio Fisico"],
-    index=0,
-)
+config_tab, results_tab = st.tabs(["Configuração", "Resultados"])
 
-campanhas = []
-campanha = "(todas)"
-if projeto:
-    try:
-        campanhas = listar_campanhas(projeto, grupo)
-    except Exception:
-        campanhas = []
+with config_tab:
+    st.subheader("Configuração da Análise")
+    with st.container():
+        left, right = st.columns([2, 1], gap="large")
 
-    campanha = st.sidebar.selectbox(
-        "Campanha (nome_campanha)",
-        options=["(todas)"] + campanhas,
-        index=0
-    )
-else:
-    st.sidebar.selectbox(
-        "Campanha (nome_campanha)",
-        options=["(preencha projeto)"],
-        index=0,
-        disabled=True
-    )
+        with left:
+            st.markdown("**Dados**")
+            busca_proj = st.text_input("Buscar projeto", value="").strip().lower()
+            projetos = listar_projetos()
+            if busca_proj:
+                projetos = [p for p in projetos if busca_proj in p.lower()]
 
-tema = st.sidebar.selectbox(
-    "Tema",
-    options=["cliente_azul", "cliente_verde", "neutro"],
-    index=0
-)
+            projeto = st.selectbox("Projeto", options=[""] + projetos, index=0)
+            grupo = st.selectbox(
+                "Grupo",
+                options=["Ictiofauna", "Zoobentos", "Fitoplancton", "Zooplancton", "Meio Fisico"],
+                index=0,
+            )
 
-pasta_saida = st.sidebar.text_input(
-    "Pasta de saída (exports)",
-    value="exports"
-)
+            campanhas = []
+            campanha = "(todas)"
+            if projeto:
+                try:
+                    campanhas = listar_campanhas(projeto, grupo)
+                except Exception:
+                    campanhas = []
 
-exportar_arquivos = st.sidebar.toggle(
-    "Exportar arquivos (xlsx/png)",
-    value=False
-)
+                campanha = st.selectbox("Campanha", options=["(todas)"] + campanhas, index=0)
+            else:
+                st.selectbox("Campanha", options=["(preencha projeto)"], index=0, disabled=True)
 
-# =========================
-# CONTROLES DE ANÁLISE (MODULAR)
-# =========================
-st.sidebar.header("Blocos de Análise")
+            st.markdown("---")
+            st.markdown("**Opções**")
+            tema = st.selectbox("Tema de visualização", options=["cliente_azul", "cliente_verde", "neutro"], index=0)
+            pasta_saida = st.text_input("Pasta de saída", value="exports")
+            exportar_arquivos = st.checkbox("Exportar arquivos (xlsx/png)", value=False)
 
-# Análises gerais (todos os grupos)
-exec_composicao = st.sidebar.toggle("📋 Composição Taxonômica", value=True)
-exec_riqueza_ponto = st.sidebar.toggle("📊 Riqueza por Ponto", value=True)
-exec_riqueza_filo = st.sidebar.toggle("🌀 Riqueza por Filo", value=True)
-exec_diversidade = st.sidebar.toggle("🧬 Diversidade Alfa", value=True)
+            st.markdown("---")
+            st.markdown("**Blocos de análise**")
+            exec_composicao = st.checkbox("Composição Taxonômica", value=True)
+            exec_riqueza_ponto = st.checkbox("Riqueza por Ponto", value=True)
+            exec_riqueza_filo = st.checkbox("Riqueza por Filo", value=True)
+            exec_diversidade = st.checkbox("Diversidade Alfa", value=True)
 
-# Análises específicas por grupo
-exec_bmwp = False
-if grupo.lower() == "zoobentos":
-    exec_bmwp = st.sidebar.toggle("🐛 BMWP (Zoobentos)", value=True)
+            if grupo.lower() == "zoobentos":
+                with st.expander("Análises específicas", expanded=False):
+                    exec_bmwp = st.checkbox("BMWP (Zoobentos)", value=True)
+            else:
+                exec_bmwp = False
 
-st.sidebar.markdown("---")
-st.sidebar.caption("Ative apenas os blocos desejados para execução mais rápida.")
+            st.markdown("---")
+            st.caption("Marque apenas os blocos que você precisa. As análises padrão geram um bom conjunto inicial.")
 
-# =========================
-# CARREGAR DADOS
-# =========================
-df_base = pd.DataFrame()
+            executar = st.button("🚀 Executar análises", use_container_width=True)
 
-if projeto:
-    with st.spinner("Carregando dados do banco..."):
-        df_base = carregar_df_base(projeto, grupo)
+        with right:
+            st.markdown("**Status do Projeto**")
+            if projeto:
+                with st.spinner("Carregando prévia do projeto..."):
+                    df_base = carregar_df_base(projeto, grupo)
 
-    if df_base.empty:
-        st.warning("Nenhum dado encontrado para esse Projeto + Grupo.")
-    else:
-        st.success(f"{len(df_base):,} registros carregados.")
-        with st.expander("Prévia (dados brutos)", expanded=False):
-            st.dataframe(df_base.head(50), use_container_width=True)
+                if df_base.empty:
+                    st.warning("Nenhum dado encontrado para esse Projeto + Grupo.")
+                else:
+                    total_registros = len(df_base)
+                    total_campanhas = df_base["nome_campanha"].nunique() if "nome_campanha" in df_base.columns else 0
+                    total_pontos = df_base["nome_ponto"].nunique() if "nome_ponto" in df_base.columns else 0
+
+                    st.metric("Registros", f"{total_registros:,}")
+                    st.metric("Campanhas", total_campanhas)
+                    st.metric("Pontos", total_pontos)
+                    st.metric("Grupo", grupo)
+
+                    with st.expander("Ver dados de entrada", expanded=False):
+                        st.dataframe(df_base.head(20), use_container_width=True)
+            else:
+                st.info("Escolha um projeto para ver o resumo e carregar os dados.")
+
+with results_tab:
+    st.subheader("Resultados")
+    st.markdown("Os resultados serão exibidos aqui após a execução." )
+    if not st.session_state.get("results_executed", False):
+        st.info("Vá para a aba Configuração e clique em Executar para gerar as análises.")
 
 # =========================
 # EXECUÇÃO MODULAR
 # =========================
-if projeto and not df_base.empty:
+if projeto and not df_base.empty and executar:
     df_trabalho = df_base.copy()
-
-    # Filtro de campanha
     if campanha and campanha != "(todas)" and "nome_campanha" in df_trabalho.columns:
         df_trabalho = df_trabalho[
             df_trabalho["nome_campanha"].astype(str).str.strip() == str(campanha).strip()
         ].copy()
 
-    # Ordem padrão de campanhas
     ordem = ordem_campanhas_padrao(grupo)
     if ordem is None and "nome_campanha" in df_trabalho.columns:
-        ordem = sorted(
-            df_trabalho["nome_campanha"].dropna().astype(str).unique().tolist()
-        )
+        ordem = sorted(df_trabalho["nome_campanha"].dropna().astype(str).unique().tolist())
 
     ctx = RunContext(
         projeto=projeto,
@@ -212,80 +215,135 @@ if projeto and not df_base.empty:
         ordem_campanhas=ordem,
     )
 
-    # =========================
-    # BOTÃO DE EXECUÇÃO
-    # =========================
-    col_exec, col_info = st.columns([1, 2])
-    with col_exec:
-        executar = st.button("🚀 Executar Análises", use_container_width=True)
-    with col_info:
-        st.caption("Executa apenas os blocos ativados na sidebar.")
+    results = []
+    if exec_composicao:
+        with st.spinner("Gerando composição taxonômica..."):
+            results.append(analisar_composicao_taxonomica(df_trabalho, ctx))
+    if exec_riqueza_ponto:
+        with st.spinner("Gerando riqueza por ponto..."):
+            results.append(analisar_riqueza_por_ponto(df_trabalho, ctx))
+    if exec_riqueza_filo:
+        with st.spinner("Gerando riqueza por filo..."):
+            results.append(analisar_riqueza_por_filo(df_trabalho, ctx))
+    if exec_diversidade:
+        with st.spinner("Gerando diversidade alfa..."):
+            results.append(analisar_diversidade_alfa(df_trabalho, ctx))
+    if exec_bmwp and grupo.lower() == "zoobentos":
+        with st.spinner("Gerando BMWP..."):
+            results.append(analisar_bmwp_zoobentos(df_trabalho, ctx))
+
+    st.session_state.results_executed = True
+    st.session_state.analysis_results = results
+
+if st.session_state.get("results_executed", False):
+    with results_tab:
+        if not st.session_state.get("analysis_results"):
+            st.warning("Nenhum bloco de análise foi executado. Marque ao menos uma opção na aba Configuração.")
+        else:
+            _ = get_theme(tema)
+            for idx, res in enumerate(st.session_state.analysis_results, start=1):
+                with st.expander(f"{idx:02d} • {res['title']}", expanded=True):
+                    if not res["ok"]:
+                        st.error(res["error"] or "Erro desconhecido")
+                        continue
+                    if res["df"] is not None and not res["df"].empty:
+                        st.dataframe(res["df"], use_container_width=True)
+                    if res["fig"] is not None:
+                        st.plotly_chart(res["fig"], use_container_width=True)
+                    if res.get("files"):
+                        st.caption("Arquivos exportados:")
+                        for f in res["files"]:
+                            st.write(f"- {Path(f).name}")
+else:
+    with results_tab:
+        if projeto and not df_base.empty:
+            st.info("Clique em Executar na aba Configuração para gerar os resultados.")
+df_base = pd.DataFrame()
+if projeto:
+    with st.spinner("Carregando dados do banco..."):
+        df_base = carregar_df_base(projeto, grupo)
+
+    if df_base.empty:
+        st.warning("Nenhum dado encontrado para esse Projeto + Grupo.")
+    else:
+        with st.container():
+            total_registros = len(df_base)
+            total_campanhas = df_base["nome_campanha"].nunique() if "nome_campanha" in df_base.columns else 0
+            total_pontos = df_base["nome_ponto"].nunique() if "nome_ponto" in df_base.columns else 0
+
+            col1, col2, col3, col4 = st.columns(4, gap="large")
+            col1.metric("Registros", f"{total_registros:,}")
+            col2.metric("Campanhas", total_campanhas)
+            col3.metric("Pontos", total_pontos)
+            col4.metric("Grupo", grupo)
+
+        with st.expander("Ver dados de entrada", expanded=False):
+            st.dataframe(df_base.head(50), use_container_width=True)
+
+# =========================
+# EXECUÇÃO MODULAR
+# =========================
+if projeto and not df_base.empty:
+    df_trabalho = df_base.copy()
+    if campanha and campanha != "(todas)" and "nome_campanha" in df_trabalho.columns:
+        df_trabalho = df_trabalho[
+            df_trabalho["nome_campanha"].astype(str).str.strip() == str(campanha).strip()
+        ].copy()
+
+    ordem = ordem_campanhas_padrao(grupo)
+    if ordem is None and "nome_campanha" in df_trabalho.columns:
+        ordem = sorted(df_trabalho["nome_campanha"].dropna().astype(str).unique().tolist())
+
+    ctx = RunContext(
+        projeto=projeto,
+        grupo=grupo,
+        campanha=campanha,
+        ponto=None,
+        pasta_saida=Path(pasta_saida),
+        tema=tema,
+        exportar_arquivos=exportar_arquivos,
+        ordem_campanhas=ordem,
+    )
+
+    executar = st.button("🚀 Executar análises", use_container_width=True)
+    st.caption("Clique apenas uma vez e aguarde a conclusão dos blocos selecionados.")
 
     if executar:
         st.markdown("---")
 
         results = []
-
-        # =========================
-        # ANÁLISES GERAIS
-        # =========================
-
         if exec_composicao:
-            with st.spinner("Executando: Composição Taxonômica..."):
-                res = analisar_composicao_taxonomica(df_trabalho, ctx)
-                results.append(res)
-
+            with st.spinner("Gerando composição taxonômica..."):
+                results.append(analisar_composicao_taxonomica(df_trabalho, ctx))
         if exec_riqueza_ponto:
-            with st.spinner("Executando: Riqueza por Ponto..."):
-                res = analisar_riqueza_por_ponto(df_trabalho, ctx)
-                results.append(res)
-
+            with st.spinner("Gerando riqueza por ponto..."):
+                results.append(analisar_riqueza_por_ponto(df_trabalho, ctx))
         if exec_riqueza_filo:
-            with st.spinner("Executando: Riqueza por Filo..."):
-                res = analisar_riqueza_por_filo(df_trabalho, ctx)
-                results.append(res)
-
+            with st.spinner("Gerando riqueza por filo..."):
+                results.append(analisar_riqueza_por_filo(df_trabalho, ctx))
         if exec_diversidade:
-            with st.spinner("Executando: Diversidade Alfa..."):
-                res = analisar_diversidade_alfa(df_trabalho, ctx)
-                results.append(res)
-
-        # =========================
-        # ANÁLISES ESPECÍFICAS
-        # =========================
-
+            with st.spinner("Gerando diversidade alfa..."):
+                results.append(analisar_diversidade_alfa(df_trabalho, ctx))
         if exec_bmwp and grupo.lower() == "zoobentos":
-            with st.spinner("Executando: BMWP (Zoobentos)..."):
-                res = analisar_bmwp_zoobentos(df_trabalho, ctx)
-                results.append(res)
+            with st.spinner("Gerando BMWP..."):
+                results.append(analisar_bmwp_zoobentos(df_trabalho, ctx))
 
-        # =========================
-        # RENDERIZAÇÃO DOS RESULTADOS
-        # =========================
-
-        if results:
-            _ = get_theme(tema)  # mantém compatibilidade
-
-            for i, res in enumerate(results, start=1):
-                st.subheader(f"{i:02d}) {res['title']}")
-
-                if not res["ok"]:
-                    st.error(res["error"] or "Erro desconhecido")
-                    continue
-
-                if res["df"] is not None and not res["df"].empty:
-                    st.dataframe(res["df"], use_container_width=True)
-
-                if res["fig"] is not None:
-                    st.plotly_chart(res["fig"], use_container_width=True)
-
-                if res.get("files"):
-                    st.caption("📁 Arquivos exportados:")
-                    for f in res["files"]:
-                        st.write(f"- {Path(f).name}")
-
+        if not results:
+            st.warning("Nenhum bloco de análise foi selecionado. Marque ao menos uma opção na barra lateral.")
         else:
-            st.info("Nenhum bloco de análise foi executado. Ative os toggles na sidebar.")
-
+            _ = get_theme(tema)
+            for idx, res in enumerate(results, start=1):
+                with st.expander(f"{idx:02d} • {res['title']}", expanded=True):
+                    if not res["ok"]:
+                        st.error(res["error"] or "Erro desconhecido")
+                        continue
+                    if res["df"] is not None and not res["df"].empty:
+                        st.dataframe(res["df"], use_container_width=True)
+                    if res["fig"] is not None:
+                        st.plotly_chart(res["fig"], use_container_width=True)
+                    if res.get("files"):
+                        st.caption("Arquivos exportados:")
+                        for f in res["files"]:
+                            st.write(f"- {Path(f).name}")
 else:
-    st.info("Selecione um Projeto e Grupo para começar as análises.")
+    st.info("Selecione um projeto e grupo para começar as análises.")
