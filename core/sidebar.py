@@ -34,6 +34,7 @@ def render_sidebar():
         st.page_link("pages/01_Importacao.py", label="📥 Importação")
         st.page_link("pages/02_Consolidacao.py", label="⚙️ Consolidação")
         st.page_link("pages/03_Analises.py", label="📊 Análises")
+        st.page_link("pages/6_Geoprocessamento.py", label="🗺️ Geoprocessamento")
 
         st.markdown(
             "<div style='font-size:0.82rem; font-weight:700; color:#6a744f; margin:16px 0 8px 2px;'>SAÍDA</div>",
