@@ -7,6 +7,7 @@ import pandas as pd
 
 from core.engine import get_engine
 from core.sidebar import render_sidebar
+from app.state import initialize_system_status, mark_stage_completed
 from analises.common.base import RunContext
 from analises.common.theme import get_theme, ordem_campanhas_padrao
 from analises.common.analises import (
@@ -33,6 +34,8 @@ if not st.session_state.get("logged_in"):
 if "logged_in" not in st.session_state or not st.session_state.logged_in:
     st.warning("Faça login para acessar esta página.")
     st.stop()
+
+initialize_system_status()
 
 # ------------------------------------------------
 # Sidebar
@@ -199,46 +202,52 @@ with results_tab:
 # EXECUÇÃO MODULAR
 # =========================
 if projeto and not df_base.empty and executar:
-    df_trabalho = df_base.copy()
-    if campanha and campanha != "(todas)" and "nome_campanha" in df_trabalho.columns:
-        df_trabalho = df_trabalho[
-            df_trabalho["nome_campanha"].astype(str).str.strip() == str(campanha).strip()
-        ].copy()
+    try:
+        with st.spinner("Executando análises..."):
+            df_trabalho = df_base.copy()
+            if campanha and campanha != "(todas)" and "nome_campanha" in df_trabalho.columns:
+                df_trabalho = df_trabalho[
+                    df_trabalho["nome_campanha"].astype(str).str.strip() == str(campanha).strip()
+                ].copy()
 
-    ordem = ordem_campanhas_padrao(grupo)
-    if ordem is None and "nome_campanha" in df_trabalho.columns:
-        ordem = sorted(df_trabalho["nome_campanha"].dropna().astype(str).unique().tolist())
+            ordem = ordem_campanhas_padrao(grupo)
+            if ordem is None and "nome_campanha" in df_trabalho.columns:
+                ordem = sorted(df_trabalho["nome_campanha"].dropna().astype(str).unique().tolist())
 
-    ctx = RunContext(
-        projeto=projeto,
-        grupo=grupo,
-        campanha=campanha,
-        ponto=None,
-        pasta_saida=Path(pasta_saida),
-        tema=tema,
-        exportar_arquivos=exportar_arquivos,
-        ordem_campanhas=ordem,
-    )
+            ctx = RunContext(
+                projeto=projeto,
+                grupo=grupo,
+                campanha=campanha,
+                ponto=None,
+                pasta_saida=Path(pasta_saida),
+                tema=tema,
+                exportar_arquivos=exportar_arquivos,
+                ordem_campanhas=ordem,
+            )
 
-    results = []
-    if exec_composicao:
-        with st.spinner("Gerando composição taxonômica..."):
-            results.append(analisar_composicao_taxonomica(df_trabalho, ctx))
-    if exec_riqueza_ponto:
-        with st.spinner("Gerando riqueza por ponto..."):
-            results.append(analisar_riqueza_por_ponto(df_trabalho, ctx))
-    if exec_riqueza_filo:
-        with st.spinner("Gerando riqueza por filo..."):
-            results.append(analisar_riqueza_por_filo(df_trabalho, ctx))
-    if exec_diversidade:
-        with st.spinner("Gerando diversidade alfa..."):
-            results.append(analisar_diversidade_alfa(df_trabalho, ctx))
-    if exec_bmwp and grupo.lower() == "zoobentos":
-        with st.spinner("Gerando BMWP..."):
-            results.append(analisar_bmwp_zoobentos(df_trabalho, ctx))
+            results = []
+            if exec_composicao:
+                results.append(analisar_composicao_taxonomica(df_trabalho, ctx))
+            if exec_riqueza_ponto:
+                results.append(analisar_riqueza_por_ponto(df_trabalho, ctx))
+            if exec_riqueza_filo:
+                results.append(analisar_riqueza_por_filo(df_trabalho, ctx))
+            if exec_diversidade:
+                results.append(analisar_diversidade_alfa(df_trabalho, ctx))
+            if exec_bmwp and grupo.lower() == "zoobentos":
+                results.append(analisar_bmwp_zoobentos(df_trabalho, ctx))
 
-    st.session_state.results_executed = True
-    st.session_state.analysis_results = results
+        st.session_state.results_executed = True
+        st.session_state.analysis_results = results
+        if results:
+            mark_stage_completed("analises_status")
+            st.success("Análises concluídas com sucesso!")
+        else:
+            st.warning("Nenhum bloco de análise foi selecionado para execução.")
+    except Exception as exc:
+        st.session_state.results_executed = False
+        st.session_state.analysis_results = []
+        st.error(f"Erro ao executar análises: {exc}")
 
 if st.session_state.get("results_executed", False):
     with results_tab:

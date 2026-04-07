@@ -5,6 +5,7 @@ from pathlib import Path
 
 import streamlit as st
 
+from app.state import initialize_system_status, mark_stage_completed
 from core.sidebar import render_sidebar
 from core.supabase_client import get_supabase
 from runners.script_runner import run_python_script
@@ -26,6 +27,8 @@ render_sidebar()
 if "logged_in" not in st.session_state or not st.session_state.logged_in:
     st.warning("Faça login para acessar esta página.")
     st.stop()
+
+initialize_system_status()
 
 st.title("02 — Consolidação")
 
@@ -67,12 +70,17 @@ st.info("Executa o script existente de consolidação (processar_dados.py).")
 
 if st.button("Rodar Consolidação"):
     script_abs = PROJECT_ROOT / spec.script
-    res = run_python_script(str(script_abs), cwd=RUNTIME_DIR)
+    try:
+        with st.spinner("Consolidando dados..."):
+            res = run_python_script(str(script_abs), cwd=RUNTIME_DIR)
 
-    st.code(res.stdout or "(sem saída)")
-    write_log(spec.key, res.status, res.stdout or "")
+        st.code(res.stdout or "(sem saída)")
+        write_log(spec.key, res.status, res.stdout or "")
 
-    if res.status == "success":
-        st.success("Consolidação concluída ✅")
-    else:
-        st.error("Consolidação falhou ❌")
+        if res.status == "success":
+            mark_stage_completed("consolidacao_status")
+            st.success("Consolidação concluída com sucesso!")
+        else:
+            st.error("A consolidação terminou com erro.")
+    except Exception as exc:
+        st.error(f"Erro ao consolidar dados: {exc}")

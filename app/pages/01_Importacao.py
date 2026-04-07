@@ -29,6 +29,7 @@ from pathlib import Path
 import pandas as pd
 from sqlalchemy import text
 
+from app.state import initialize_system_status, mark_stage_completed
 from core.engine import get_engine
 from runners.registry import ACTIONS, GROUP_TO_ACTION_KEY
 from runners.script_runner import run_python_script
@@ -42,6 +43,8 @@ from validators.registry import VALIDATORS
 if "logged_in" not in st.session_state or not st.session_state.logged_in:
     st.warning("Faça login para acessar esta página.")
     st.stop()
+
+initialize_system_status()
 
 
 # ------------------------------------------------
@@ -355,28 +358,34 @@ if "clean_changes" not in st.session_state:
 btn_validate = st.button("Validar (corrige automaticamente)", disabled=(excel_path is None))
 
 if btn_validate:
-    cleaned_path = runtime_dir / f"clean_{excel_path.name}"
-    total_changes = write_clean_excel(excel_path, cleaned_path)
+    try:
+        with st.spinner("Validando arquivo..."):
+            cleaned_path = runtime_dir / f"clean_{excel_path.name}"
+            total_changes = write_clean_excel(excel_path, cleaned_path)
 
-    st.session_state["clean_changes"] = int(total_changes)
-    st.session_state["excel_para_migrar"] = str(cleaned_path)
+            st.session_state["clean_changes"] = int(total_changes)
+            st.session_state["excel_para_migrar"] = str(cleaned_path)
 
-    st.success("Correção automática concluída ✅")
-    st.metric("Correções automáticas aplicadas", st.session_state["clean_changes"])
+            xls_clean = pd.ExcelFile(cleaned_path)
+            ok, errors = VALIDATORS[grupo].validate(xls_clean)
 
-    xls_clean = pd.ExcelFile(cleaned_path)
-    ok, errors = VALIDATORS[grupo].validate(xls_clean)
+        st.success("Validação concluída com sucesso!")
+        st.metric("Correções automáticas aplicadas", st.session_state["clean_changes"])
 
-    if ok:
-        st.success("Validação estrutural OK ✅")
-        st.session_state["validated_ok"] = True
-        st.info("Pronto para migrar: a migração usará o Excel limpo automaticamente.")
-    else:
+        if ok:
+            mark_stage_completed("importacao_status")
+            st.success("Arquivo validado e pronto para migrar.")
+            st.session_state["validated_ok"] = True
+            st.info("Pronto para migrar: a migração usará o arquivo corrigido automaticamente.")
+        else:
+            st.session_state["validated_ok"] = False
+            st.error("A validação encontrou pontos que precisam de ajuste.")
+            for e in errors:
+                st.write("-", e)
+            st.warning("Corrija os itens acima e valide novamente.")
+    except Exception as exc:
         st.session_state["validated_ok"] = False
-        st.error("Validação estrutural falhou ❌")
-        for e in errors:
-            st.write("-", e)
-        st.warning("Corrija os itens acima e valide novamente.")
+        st.error(f"Erro ao validar arquivo: {exc}")
 
 
 # ============================================================
@@ -402,31 +411,36 @@ if st.button("Migrar", disabled=not can_migrate):
         st.error(f"Falha ao preparar ambiente da migração: {e}")
         st.stop()
 
-    res = run_python_script(
-        script_path=str(script_abs),
-        args=[str(excel_para_migrar.resolve())],
-        cwd=runtime_dir,
-        extra_env=extra_env,
-    )
-
-    ok = getattr(res, "status", "") == "success"
-
-    if ok:
-        st.success("Migração concluída ✅")
-    else:
-        st.error("Migração falhou ❌")
-
-    stdout = getattr(res, "stdout", "") or ""
-    stderr = getattr(res, "stderr", "") or ""
-
-    if stdout.strip():
-        st.code(stdout, language="text")
-    if stderr.strip():
-        st.code(stderr, language="text")
-
-    st.markdown("---")
-    st.subheader("Resumo pós-migração (2.1)")
     try:
-        gerar_resumo_pos_migracao(grupo, excel_para_migrar.resolve())
-    except Exception as e:
-        st.warning(f"Falha ao gerar resumo pós-migração: {e}")
+        with st.spinner("Migrando dados..."):
+            res = run_python_script(
+                script_path=str(script_abs),
+                args=[str(excel_para_migrar.resolve())],
+                cwd=runtime_dir,
+                extra_env=extra_env,
+            )
+
+        ok = getattr(res, "status", "") == "success"
+
+        if ok:
+            mark_stage_completed("importacao_status")
+            st.success("Migração concluída com sucesso!")
+        else:
+            st.error("A migração terminou com erro.")
+
+        stdout = getattr(res, "stdout", "") or ""
+        stderr = getattr(res, "stderr", "") or ""
+
+        if stdout.strip():
+            st.code(stdout, language="text")
+        if stderr.strip():
+            st.code(stderr, language="text")
+
+        st.markdown("---")
+        st.subheader("Resumo pós-migração (2.1)")
+        try:
+            gerar_resumo_pos_migracao(grupo, excel_para_migrar.resolve())
+        except Exception as e:
+            st.warning(f"Falha ao gerar resumo pós-migração: {e}")
+    except Exception as exc:
+        st.error(f"Erro ao migrar dados: {exc}")
