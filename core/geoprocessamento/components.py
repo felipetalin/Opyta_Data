@@ -35,36 +35,130 @@ def render_empty_state() -> None:
     st.info("Nenhum dado encontrado para os filtros selecionados. Ajuste projeto/campanha e tente novamente.")
 
 
-def render_project_filter(projetos: list[str]) -> str:
-    return st.selectbox("Projeto", options=[""] + projetos, index=0, key="geo_projeto")
+def render_project_filter(projetos: list[str]) -> list[str]:
+    return st.multiselect("Projeto", options=projetos, key="geo_projetos")
 
 
-def render_campaign_filter(campanhas: list[str], disabled: bool = False) -> str:
+def render_campaign_filter(campanhas: list[str], disabled: bool = False) -> list[str]:
     if disabled:
-        st.selectbox(
+        st.multiselect(
             "Campanha",
-            options=["(selecione um projeto)"],
-            index=0,
+            options=[],
             disabled=True,
         )
-        return ""
+        return []
 
-    return st.selectbox("Campanha", options=[""] + campanhas, index=0, key="geo_campanha")
+    return st.multiselect("Campanha", options=campanhas, key="geo_campanhas")
 
 
-def render_cards(resumo: dict[str, int]) -> None:
-    st.subheader("Resumo")
+def render_biological_group_filter(grupos: list[str], disabled: bool = False) -> list[str]:
+    if disabled:
+        st.multiselect("Grupo biológico", options=[], disabled=True)
+        return []
+    return st.multiselect("Grupo biológico", options=grupos, key="geo_grupos_biologicos")
+
+
+def render_indicator_selector(modo: ModoGeo, df: pd.DataFrame) -> str:
+    if modo != "Biota":
+        st.selectbox(
+            "Indicador do mapa",
+            options=["pontos_amostrados"],
+            index=0,
+            disabled=True,
+            key="geo_indicador_fisico",
+        )
+        return "pontos_amostrados"
+
+    options = [
+        "riqueza",
+        "abundancia_total",
+        "biomassa_total",
+        "shannon",
+        "pielou",
+        "numero_taxons",
+    ]
+    if "bmwp_total" in df.columns:
+        options.extend(["bmwp_total", "riqueza_ept", "abundancia_ept"])
+
+    return st.selectbox("Indicador do mapa", options=options, index=0, key="geo_indicador")
+
+
+def render_context_bar(
+    modo: ModoGeo,
+    projetos: list[str],
+    campanhas: list[str],
+    grupos_biologicos: list[str],
+    indicador: str,
+    total_pontos: int,
+) -> None:
+    st.caption(
+        " | ".join(
+            [
+                f"Modo: {modo}",
+                f"Projetos: {len(projetos) if projetos else 'Todos'}",
+                f"Campanhas: {len(campanhas) if campanhas else 'Todas'}",
+                f"Grupos: {len(grupos_biologicos) if grupos_biologicos else 'Todos'}",
+                f"Indicador: {indicador}",
+                f"Pontos: {total_pontos}",
+            ]
+        )
+    )
+
+
+def reset_geo_filters() -> None:
+    for key in [
+        "geo_projetos",
+        "geo_campanhas",
+        "geo_grupos_biologicos",
+        "geo_indicador",
+        "geo_indicador_fisico",
+    ]:
+        if key in st.session_state:
+            st.session_state.pop(key)
+
+
+def render_cards(resumo: dict[str, float], modo: ModoGeo) -> None:
+    st.subheader("Indicadores ecológicos")
     c1, c2, c3, c4 = st.columns(4)
-    c1.metric("Registros", resumo.get("registros", 0))
-    c2.metric("Projetos", resumo.get("projetos", 0))
-    c3.metric("Campanhas", resumo.get("campanhas", 0))
-    c4.metric("Pontos", resumo.get("pontos", 0))
+    c1.metric("Riqueza média", f"{resumo.get('riqueza_media', 0.0):.2f}")
+    c2.metric("Abundância total", f"{resumo.get('abundancia_total', 0.0):,.0f}")
+    c3.metric("Biomassa total", f"{resumo.get('biomassa_total', 0.0):,.2f}")
+    c4.metric("Shannon médio", f"{resumo.get('shannon_medio', 0.0):.2f}")
+
+    c5, c6, c7, c8 = st.columns(4)
+    c5.metric("Pielou médio", f"{resumo.get('pielou_medio', 0.0):.2f}")
+    c6.metric("Projetos", f"{resumo.get('projetos', 0.0):,.0f}")
+    c7.metric("Campanhas", f"{resumo.get('campanhas', 0.0):,.0f}")
+    c8.metric("Pontos", f"{resumo.get('pontos', 0.0):,.0f}")
+
+    if modo == "Biota" and resumo.get("bmwp_total", 0.0) > 0:
+        c9, c10, c11 = st.columns(3)
+        c9.metric("BMWP total", f"{resumo.get('bmwp_total', 0.0):,.0f}")
+        c10.metric("Riqueza EPT", f"{resumo.get('riqueza_ept_total', 0.0):,.0f}")
+        c11.metric("Abundância EPT", f"{resumo.get('abundancia_ept_total', 0.0):,.0f}")
 
 
-def render_table(df: pd.DataFrame) -> None:
+def render_ranking(df: pd.DataFrame, indicador: str, top_n: int = 10) -> None:
+    st.subheader("Ranking de pontos")
+    if df.empty or indicador not in df.columns:
+        st.info("Sem dados suficientes para ranking.")
+        return
+
+    ranking = df[["ponto", "campanha", indicador]].copy()
+    ranking[indicador] = pd.to_numeric(ranking[indicador], errors="coerce").fillna(0)
+    ranking = ranking.sort_values(indicador, ascending=False).head(top_n)
+    st.dataframe(ranking, use_container_width=True, height=360)
+
+
+def render_table(df: pd.DataFrame, indicador: str | None = None) -> None:
     st.subheader("Tabela")
     if df.empty:
         render_empty_state()
         return
 
-    st.dataframe(df, use_container_width=True, height=420)
+    table_df = df.copy()
+    if indicador and indicador in table_df.columns:
+        table_df[indicador] = pd.to_numeric(table_df[indicador], errors="coerce")
+        table_df = table_df.sort_values(indicador, ascending=False)
+
+    st.dataframe(table_df, use_container_width=True, height=420)

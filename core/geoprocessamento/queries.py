@@ -8,9 +8,29 @@ from sqlalchemy import text
 ModoGeo = Literal["Fisico", "Biota"]
 
 
-def get_geo_fisico(conn, projeto: str = "", campanha: str = "") -> pd.DataFrame:
+def _build_in_clause(prefix: str, values: list[str], params: dict[str, str]) -> str:
+    placeholders: list[str] = []
+    for idx, value in enumerate(values):
+        key = f"{prefix}_{idx}"
+        params[key] = value
+        placeholders.append(f":{key}")
+    return ", ".join(placeholders)
+
+
+def get_geo_fisico(conn, projetos: list[str] | None = None, campanhas: list[str] | None = None) -> pd.DataFrame:
+    projetos = projetos or []
+    campanhas = campanhas or []
+
+    params: dict[str, str] = {}
+    conditions = ["latitude IS NOT NULL", "longitude IS NOT NULL"]
+
+    if projetos:
+        conditions.append(f"projeto IN ({_build_in_clause('projeto', projetos, params)})")
+    if campanhas:
+        conditions.append(f"campanha IN ({_build_in_clause('campanha', campanhas, params)})")
+
     query = text(
-        """
+        f"""
         SELECT
             projeto,
             campanha,
@@ -18,34 +38,55 @@ def get_geo_fisico(conn, projeto: str = "", campanha: str = "") -> pd.DataFrame:
             latitude,
             longitude
         FROM public.vw_geo_fisico
-        WHERE latitude IS NOT NULL
-          AND longitude IS NOT NULL
-          AND (:projeto = '' OR projeto = :projeto)
-          AND (:campanha = '' OR campanha = :campanha)
+        WHERE {' AND '.join(conditions)}
         ORDER BY projeto, campanha, ponto
         """
     )
-    return pd.read_sql(query, conn, params={"projeto": projeto or "", "campanha": campanha or ""})
+    return pd.read_sql(query, conn, params=params)
 
 
-def get_geo_biota(conn, projeto: str = "", campanha: str = "") -> pd.DataFrame:
+def get_geo_biota(
+    conn,
+    projetos: list[str] | None = None,
+    campanhas: list[str] | None = None,
+    grupos_biologicos: list[str] | None = None,
+) -> pd.DataFrame:
+    projetos = projetos or []
+    campanhas = campanhas or []
+    grupos_biologicos = grupos_biologicos or []
+
+    params: dict[str, str] = {}
+    conditions = ["latitude IS NOT NULL", "longitude IS NOT NULL"]
+
+    if projetos:
+        conditions.append(f"nome_projeto IN ({_build_in_clause('projeto', projetos, params)})")
+    if campanhas:
+        conditions.append(f"nome_campanha IN ({_build_in_clause('campanha', campanhas, params)})")
+    if grupos_biologicos:
+        conditions.append(
+            f"grupo_biologico IN ({_build_in_clause('grupo_biologico', grupos_biologicos, params)})"
+        )
+
     query = text(
-        """
+        f"""
         SELECT
-            projeto,
-            campanha,
-            ponto,
+            nome_projeto AS projeto,
+            nome_campanha AS campanha,
+            nome_ponto AS ponto,
             latitude,
-            longitude
-        FROM public.vw_geo_biota
-        WHERE latitude IS NOT NULL
-          AND longitude IS NOT NULL
-          AND (:projeto = '' OR projeto = :projeto)
-          AND (:campanha = '' OR campanha = :campanha)
-        ORDER BY projeto, campanha, ponto
+            longitude,
+            grupo_biologico,
+            nome_cientifico,
+            contagem,
+            biomassa,
+            ordem,
+            bmwp_score
+        FROM public.biota_analise_consolidada
+        WHERE {' AND '.join(conditions)}
+        ORDER BY nome_projeto, nome_campanha, nome_ponto
         """
     )
-    return pd.read_sql(query, conn, params={"projeto": projeto or "", "campanha": campanha or ""})
+    return pd.read_sql(query, conn, params=params)
 
 
 def listar_projetos(conn, modo: ModoGeo) -> list[str]:
@@ -62,16 +103,45 @@ def listar_projetos(conn, modo: ModoGeo) -> list[str]:
     return df["projeto"].astype(str).tolist() if not df.empty else []
 
 
-def listar_campanhas(conn, modo: ModoGeo, projeto: str = "") -> list[str]:
+def listar_campanhas(conn, modo: ModoGeo, projetos: list[str] | None = None) -> list[str]:
     view_name = "vw_geo_fisico" if modo == "Fisico" else "vw_geo_biota"
+    projetos = projetos or []
+
+    params: dict[str, str] = {}
+    conditions = ["campanha IS NOT NULL"]
+    if projetos:
+        conditions.append(f"projeto IN ({_build_in_clause('projeto', projetos, params)})")
+
     query = text(
         f"""
         SELECT DISTINCT campanha
         FROM public.{view_name}
-        WHERE campanha IS NOT NULL
-          AND (:projeto = '' OR projeto = :projeto)
+        WHERE {' AND '.join(conditions)}
         ORDER BY campanha
         """
     )
-    df = pd.read_sql(query, conn, params={"projeto": projeto or ""})
+    df = pd.read_sql(query, conn, params=params)
     return df["campanha"].astype(str).tolist() if not df.empty else []
+
+
+def listar_grupos_biologicos(conn, projetos: list[str] | None = None, campanhas: list[str] | None = None) -> list[str]:
+    projetos = projetos or []
+    campanhas = campanhas or []
+
+    params: dict[str, str] = {}
+    conditions = ["grupo_biologico IS NOT NULL"]
+    if projetos:
+        conditions.append(f"projeto IN ({_build_in_clause('projeto', projetos, params)})")
+    if campanhas:
+        conditions.append(f"campanha IN ({_build_in_clause('campanha', campanhas, params)})")
+
+    query = text(
+        f"""
+        SELECT DISTINCT grupo_biologico
+        FROM public.vw_geo_biota
+        WHERE {' AND '.join(conditions)}
+        ORDER BY grupo_biologico
+        """
+    )
+    df = pd.read_sql(query, conn, params=params)
+    return df["grupo_biologico"].astype(str).tolist() if not df.empty else []

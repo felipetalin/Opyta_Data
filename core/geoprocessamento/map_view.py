@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import branca.colormap as cm
+import folium
 import pandas as pd
 import streamlit as st
 
@@ -21,7 +23,18 @@ def _cleanup_schema_desktop_ini() -> None:
             pass
 
 
-def build_leafmap(df: pd.DataFrame, modo: str):
+def _value_range(df: pd.DataFrame, indicador: str) -> tuple[float, float]:
+    values = pd.to_numeric(df[indicador], errors="coerce").fillna(0) if indicador in df.columns else pd.Series([0.0])
+    return float(values.min()), float(values.max())
+
+
+def _radius_for_value(value: float, min_v: float, max_v: float) -> float:
+    if max_v <= min_v:
+        return 6.0
+    return 5.0 + 15.0 * ((value - min_v) / (max_v - min_v))
+
+
+def build_leafmap(df: pd.DataFrame, modo: str, indicador: str):
     _cleanup_schema_desktop_ini()
     import leafmap.foliumap as leafmap
 
@@ -31,18 +44,41 @@ def build_leafmap(df: pd.DataFrame, modo: str):
     m = leafmap.Map(center=(center_lat, center_lon), zoom=5)
     m.add_basemap("SATELLITE")
 
+    min_v, max_v = _value_range(df, indicador)
+    colormap = cm.LinearColormap(["#fde68a", "#f59e0b", "#dc2626"], vmin=min_v, vmax=max_v)
+    colormap.caption = f"Indicador: {indicador}"
+
     layer_name = "Pontos Biota" if modo == "Biota" else "Pontos Fisico"
-    m.add_points_from_xy(
-        data=df,
-        x="longitude",
-        y="latitude",
-        popup=["projeto", "campanha", "ponto"],
-        layer_name=layer_name,
-    )
+    feature_group = folium.FeatureGroup(name=layer_name)
+
+    for _, row in df.iterrows():
+        value = float(pd.to_numeric(row.get(indicador, 0), errors="coerce") or 0.0)
+        radius = _radius_for_value(value, min_v, max_v)
+        color = colormap(value)
+
+        popup_html = (
+            f"<b>Projeto:</b> {row.get('projeto', '-')}<br>"
+            f"<b>Campanha:</b> {row.get('campanha', '-')}<br>"
+            f"<b>Ponto:</b> {row.get('ponto', '-')}<br>"
+            f"<b>{indicador}:</b> {value:.3f}"
+        )
+
+        folium.CircleMarker(
+            location=[row["latitude"], row["longitude"]],
+            radius=radius,
+            color=color,
+            weight=1,
+            fill=True,
+            fill_opacity=0.8,
+            popup=folium.Popup(popup_html, max_width=320),
+        ).add_to(feature_group)
+
+    feature_group.add_to(m)
+    colormap.add_to(m)
     return m
 
 
-def render_mapa_geo(df: pd.DataFrame, modo: str) -> None:
+def render_mapa_geo(df: pd.DataFrame, modo: str, indicador: str) -> None:
     st.subheader("Mapa")
 
     if df.empty:
@@ -50,7 +86,7 @@ def render_mapa_geo(df: pd.DataFrame, modo: str) -> None:
         return
 
     try:
-        m = build_leafmap(df, modo)
+        m = build_leafmap(df, modo, indicador)
         m.to_streamlit(height=620)
     except ModuleNotFoundError:
         st.error("Dependencia leafmap nao encontrada no ambiente. Instale o pacote leafmap para habilitar o mapa.")
