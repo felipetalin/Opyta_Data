@@ -8,7 +8,6 @@ if str(ROOT) not in sys.path:
 import streamlit as st
 from dotenv import load_dotenv
 
-from app.state import initialize_system_status, render_system_status
 from core.sidebar import render_sidebar
 
 load_dotenv()
@@ -188,8 +187,6 @@ def require_login():
 if not require_login():
     st.stop()
 
-initialize_system_status()
-
 render_sidebar()
 
 st.markdown("""
@@ -203,8 +200,6 @@ st.markdown(
     "📌 **Fluxo completo:** Base Mestre → Importação → Consolidação → Análises → Exportação\n"
     "Cada etapa prepara dados para a próxima. Comece cadastrando sua referência, depois importe e analise."
 )
-
-render_system_status()
 
 col1, col2 = st.columns(2, gap="large")
 

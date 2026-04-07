@@ -6,7 +6,6 @@ from pathlib import Path
 
 import streamlit as st
 
-from app.state import initialize_system_status, mark_stage_completed
 from core.sidebar import render_sidebar
 from core.supabase_client import get_supabase
 from runners.script_runner import run_python_script
@@ -29,8 +28,6 @@ render_sidebar()
 if "logged_in" not in st.session_state or not st.session_state.logged_in:
     st.warning("Faça login para acessar esta página.")
     st.stop()
-
-initialize_system_status()
 
 st.title("00 — Base Mestre")
 
@@ -205,31 +202,15 @@ with col1:
     up = st.file_uploader("Upload cadastro_especies_opyta.xlsx", type=["xlsx"], key="up_especies")
 
     if st.button("Rodar cadastro de espécies", disabled=(up is None)):
-        try:
-            res = run_base_action("BASE_ESPECIES", up.getvalue())
-            if res.status == "success":
-                mark_stage_completed("base_mestre_status")
-                st.success("Cadastro de espécies concluído com sucesso!")
-            else:
-                st.error("O cadastro de espécies terminou com erro.")
-            parsed = parse_species_stdout(res.stdout or "")
-            render_run_summary("Cadastro de Espécies", res.status, res.stdout or "", parsed)
-        except Exception as exc:
-            st.error(f"Erro ao executar cadastro de espécies: {exc}")
+        res = run_base_action("BASE_ESPECIES", up.getvalue())
+        parsed = parse_species_stdout(res.stdout or "")
+        render_run_summary("Cadastro de Espécies", res.status, res.stdout or "", parsed)
 
 with col2:
     st.subheader("Cadastrar Parâmetros")
     up = st.file_uploader("Upload cadastro_parametros_opyta.xlsx", type=["xlsx"], key="up_parametros")
 
     if st.button("Rodar cadastro de parâmetros", disabled=(up is None)):
-        try:
-            res = run_base_action("BASE_PARAMETROS", up.getvalue())
-            if res.status == "success":
-                mark_stage_completed("base_mestre_status")
-                st.success("Cadastro de parâmetros concluído com sucesso!")
-            else:
-                st.error("O cadastro de parâmetros terminou com erro.")
-            parsed = parse_parametros_stdout(res.stdout or "")
-            render_run_summary("Cadastro de Parâmetros", res.status, res.stdout or "", parsed)
-        except Exception as exc:
-            st.error(f"Erro ao executar cadastro de parâmetros: {exc}")
+        res = run_base_action("BASE_PARAMETROS", up.getvalue())
+        parsed = parse_parametros_stdout(res.stdout or "")
+        render_run_summary("Cadastro de Parâmetros", res.status, res.stdout or "", parsed)

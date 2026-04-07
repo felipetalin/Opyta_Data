@@ -7,7 +7,6 @@ import pandas as pd
 import streamlit as st
 from sqlalchemy import text
 
-from app.state import initialize_system_status, mark_stage_completed
 from core.engine import get_engine
 from core.sidebar import render_sidebar
 
@@ -21,8 +20,6 @@ render_sidebar()
 if "logged_in" not in st.session_state or not st.session_state.logged_in:
     st.warning("Faça login para acessar esta página.")
     st.stop()
-
-initialize_system_status()
 
 st.title("04 — Exportação")
 
@@ -313,13 +310,12 @@ if carregar:
     if not projeto and not grupo:
         st.warning("Selecione ao menos Projeto ou Grupo para evitar consultas muito grandes.")
     else:
-        try:
-            with st.spinner("Carregando dados para exportação..."):
+        with st.spinner("Consultando dados..."):
+            try:
                 df = carregar_dados(projeto, grupo, campanha)
-            st.success("Dados carregados com sucesso!")
-        except Exception as exc:
-            st.error(f"Erro ao consultar dados: {exc}")
-            df = pd.DataFrame()
+            except Exception as exc:
+                st.error(f"Erro ao consultar dados: {exc}")
+                df = pd.DataFrame()
 
         if df.empty:
             st.warning("Nenhum registro encontrado com os filtros selecionados.")
@@ -359,7 +355,6 @@ if carregar:
                 Path(EXPORT_DIR / csv_name).write_bytes(csv_bytes)
                 Path(EXPORT_DIR / xlsx_name).write_bytes(xlsx_bytes)
 
-                mark_stage_completed("exportacao_status")
                 st.info(f"✅ Arquivos salvos em `{EXPORT_DIR.resolve()}`")
             
             else:  # Darwin Core
@@ -380,7 +375,6 @@ if carregar:
                     )
                     
                     Path(EXPORT_DIR / dc_name).write_bytes(dc_bytes)
-                    mark_stage_completed("exportacao_status")
                     st.success(f"✅ Darwin Core gerado com sucesso! (3 abas: Sampling Events, Occurrences, Biometric)")
                     st.info(f"📂 Arquivo também salvo em `{EXPORT_DIR.resolve()}`")
                 
