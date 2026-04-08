@@ -4,6 +4,7 @@ from typing import Literal
 
 import pandas as pd
 from sqlalchemy import text
+from sqlalchemy.exc import SQLAlchemyError
 
 ModoGeo = Literal["Fisico", "Biota"]
 
@@ -29,9 +30,13 @@ def get_geo_fisico(conn, projetos: list[str] | None = None, campanhas: list[str]
     ]
 
     if projetos:
-        conditions.append(f"projeto IN ({_build_in_clause('projeto', projetos, params)})")
+        conditions.append(
+            f"nome_projeto IN ({_build_in_clause('projeto_fisico', projetos, params)})"
+        )
     if campanhas:
-        conditions.append(f"campanha IN ({_build_in_clause('campanha', campanhas, params)})")
+        conditions.append(
+            f"nome_campanha IN ({_build_in_clause('campanha_fisico', campanhas, params)})"
+        )
 
     query = text(
         f"""
@@ -55,7 +60,44 @@ def get_geo_fisico(conn, projetos: list[str] | None = None, campanhas: list[str]
         ORDER BY nome_projeto, nome_campanha, nome_ponto, nome_parametro
         """
     )
-    return pd.read_sql(query, conn, params=params)
+    try:
+        return pd.read_sql(query, conn, params=params)
+    except SQLAlchemyError:
+        # Fallback para ambientes que ainda nao possuem a tabela consolidada.
+        legacy_params: dict[str, str] = {}
+        legacy_conditions = ["latitude IS NOT NULL", "longitude IS NOT NULL"]
+        if projetos:
+            legacy_conditions.append(
+                f"projeto IN ({_build_in_clause('projeto_legacy', projetos, legacy_params)})"
+            )
+        if campanhas:
+            legacy_conditions.append(
+                f"campanha IN ({_build_in_clause('campanha_legacy', campanhas, legacy_params)})"
+            )
+
+        legacy_query = text(
+            f"""
+            SELECT
+                projeto,
+                campanha,
+                ponto,
+                latitude,
+                longitude,
+                'Água Superficial' AS matriz,
+                nome_parametro,
+                NULL::character varying AS sinal_limite,
+                valor_medido,
+                unidade_medida,
+                NULL::numeric AS vmp_357_cl2_min,
+                NULL::numeric AS vmp_357_cl2_max,
+                NULL::numeric AS vmp_amonia_dinamico,
+                data_hora_coleta
+            FROM public.vw_geo_fisico
+            WHERE {' AND '.join(legacy_conditions)}
+            ORDER BY projeto, campanha, ponto, nome_parametro
+            """
+        )
+        return pd.read_sql(legacy_query, conn, params=legacy_params)
 
 
 def get_geo_biota(

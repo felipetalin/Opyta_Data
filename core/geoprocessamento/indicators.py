@@ -250,6 +250,23 @@ def calcular_indicadores_fisicos_por_ponto(df: pd.DataFrame) -> pd.DataFrame:
         ])
 
     work = df.copy()
+    required_defaults: dict[str, object] = {
+        "projeto": "",
+        "campanha": "",
+        "ponto": "",
+        "latitude": None,
+        "longitude": None,
+        "matriz": "Água Superficial",
+        "nome_parametro": "",
+        "valor_medido": None,
+        "vmp_357_cl2_min": None,
+        "vmp_357_cl2_max": None,
+        "vmp_amonia_dinamico": None,
+    }
+    for col, default in required_defaults.items():
+        if col not in work.columns:
+            work[col] = default
+
     work["valor_medido"] = _safe_series(work, "valor_medido", default=0.0)
     work["vmp_357_cl2_min"] = pd.to_numeric(work.get("vmp_357_cl2_min"), errors="coerce")
     work["vmp_357_cl2_max"] = pd.to_numeric(work.get("vmp_357_cl2_max"), errors="coerce")
