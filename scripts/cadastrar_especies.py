@@ -41,6 +41,14 @@ def explain_error(exc: Exception) -> tuple[str, str]:
             "Se a coluna for opcional, verifique se o script em deploy está atualizado.",
         )
 
+    if "undefinedcolumn" in msg.lower() or (
+        "column" in msg.lower() and "does not exist" in msg.lower()
+    ):
+        return (
+            "A estrutura da tabela 'especies' no banco está desatualizada em relação ao script.",
+            "Aplique a migration 002 ou mantenha o script em modo compatível com colunas existentes.",
+        )
+
     if "relation" in msg.lower() and "does not exist" in msg.lower():
         return (
             "Tabela/visão não encontrada no banco.",
@@ -193,57 +201,66 @@ def cadastrar_especies_principal(connection, df_especies):
                 record[key] = value.strip()
 
     if records_to_insert:
-        query = text(
-            """
+        cols_db = pd.read_sql(
+            text(
+                """
+                SELECT column_name
+                FROM information_schema.columns
+                WHERE table_schema = 'public'
+                  AND table_name = 'especies'
+                """
+            ),
+            connection,
+        )["column_name"].tolist()
+        cols_db_set = set(cols_db)
+
+        available_cols = [c for c in expected_db_cols if c in cols_db_set]
+        missing_cols = [c for c in expected_db_cols if c not in cols_db_set]
+
+        if "nome_cientifico" not in available_cols:
+            raise RuntimeError(
+                "A tabela 'especies' não possui a coluna obrigatória 'nome_cientifico'."
+            )
+
+        if missing_cols:
+            print(
+                "  Aviso: colunas não encontradas na tabela 'especies' "
+                f"(serão ignoradas neste ambiente): {', '.join(missing_cols)}"
+            )
+
+        rows = [{k: rec.get(k) for k in available_cols} for rec in records_to_insert]
+
+        insert_cols_sql = ",\n                ".join(available_cols)
+        values_cols_sql = ", ".join(f":{c}" for c in available_cols)
+        update_cols = [c for c in available_cols if c != "nome_cientifico"]
+
+        if update_cols:
+            update_sql = ",\n                ".join(
+                f"{c} = EXCLUDED.{c}" for c in update_cols
+            )
+            query_sql = f"""
             INSERT INTO especies (
-                nome_cientifico, nome_popular, grupo_biologico, reino, filo, classe,
-                ordem, familia, genero, autor_e_ano, status_ameaca_nacional,
-                status_ameaca_global, origem, habito_alimentar, estrategia_reprodutiva,
-                valor_economico, observacoes, bmwp_score,
-                status_estadual, status_copam, cites, guilda_alimentar,
-                dependencia_florestal, endemismo, sensibilidade_ambiental,
-                migratorio, raridade
+                {insert_cols_sql}
             )
             VALUES (
-                :nome_cientifico, :nome_popular, :grupo_biologico, :reino, :filo, :classe,
-                :ordem, :familia, :genero, :autor_e_ano, :status_ameaca_nacional,
-                :status_ameaca_global, :origem, :habito_alimentar, :estrategia_reprodutiva,
-                :valor_economico, :observacoes, :bmwp_score,
-                :status_estadual, :status_copam, :cites, :guilda_alimentar,
-                :dependencia_florestal, :endemismo, :sensibilidade_ambiental,
-                :migratorio, :raridade
+                {values_cols_sql}
             )
             ON CONFLICT (nome_cientifico)
             DO UPDATE SET
-                nome_popular = EXCLUDED.nome_popular,
-                grupo_biologico = EXCLUDED.grupo_biologico,
-                reino = EXCLUDED.reino,
-                filo = EXCLUDED.filo,
-                classe = EXCLUDED.classe,
-                ordem = EXCLUDED.ordem,
-                familia = EXCLUDED.familia,
-                genero = EXCLUDED.genero,
-                autor_e_ano = EXCLUDED.autor_e_ano,
-                status_ameaca_nacional = EXCLUDED.status_ameaca_nacional,
-                status_ameaca_global = EXCLUDED.status_ameaca_global,
-                origem = EXCLUDED.origem,
-                habito_alimentar = EXCLUDED.habito_alimentar,
-                estrategia_reprodutiva = EXCLUDED.estrategia_reprodutiva,
-                valor_economico = EXCLUDED.valor_economico,
-                observacoes = EXCLUDED.observacoes,
-                bmwp_score = EXCLUDED.bmwp_score,
-                status_estadual = EXCLUDED.status_estadual,
-                status_copam = EXCLUDED.status_copam,
-                cites = EXCLUDED.cites,
-                guilda_alimentar = EXCLUDED.guilda_alimentar,
-                dependencia_florestal = EXCLUDED.dependencia_florestal,
-                endemismo = EXCLUDED.endemismo,
-                sensibilidade_ambiental = EXCLUDED.sensibilidade_ambiental,
-                migratorio = EXCLUDED.migratorio,
-                raridade = EXCLUDED.raridade
+                {update_sql}
             """
-        )
-        connection.execute(query, records_to_insert)
+        else:
+            query_sql = f"""
+            INSERT INTO especies (
+                {insert_cols_sql}
+            )
+            VALUES (
+                {values_cols_sql}
+            )
+            ON CONFLICT (nome_cientifico) DO NOTHING
+            """
+
+        connection.execute(text(query_sql), rows)
 
     print(f"Tabela de Espécies principal atualizada. {len(records_to_insert)} registros processados.")
 
