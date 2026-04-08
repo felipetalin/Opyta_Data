@@ -158,10 +158,10 @@ def listar_projetos(conn, modo: ModoGeo) -> list[str]:
     else:
         query = text(
             """
-            SELECT DISTINCT projeto
-            FROM public.vw_geo_biota
-            WHERE projeto IS NOT NULL
-            ORDER BY projeto
+            SELECT DISTINCT nome_projeto AS projeto
+            FROM public.biota_analise_consolidada
+            WHERE nome_projeto IS NOT NULL
+            ORDER BY nome_projeto
             """
         )
     df = pd.read_sql(query, conn)
@@ -172,9 +172,6 @@ def listar_campanhas(conn, modo: ModoGeo, projetos: list[str] | None = None) -> 
     projetos = projetos or []
 
     params: dict[str, str] = {}
-    conditions = ["campanha IS NOT NULL"]
-    if projetos:
-        conditions.append(f"projeto IN ({_build_in_clause('projeto', projetos, params)})")
 
     if modo == "Fisico":
         fisico_conditions = ["nome_campanha IS NOT NULL", "matriz = 'Água Superficial'"]
@@ -191,12 +188,17 @@ def listar_campanhas(conn, modo: ModoGeo, projetos: list[str] | None = None) -> 
             """
         )
     else:
+        biota_conditions = ["nome_campanha IS NOT NULL"]
+        if projetos:
+            biota_conditions.append(
+                f"nome_projeto IN ({_build_in_clause('projeto_biota', projetos, params)})"
+            )
         query = text(
             f"""
-            SELECT DISTINCT campanha
-            FROM public.vw_geo_biota
-            WHERE {' AND '.join(conditions)}
-            ORDER BY campanha
+            SELECT DISTINCT nome_campanha AS campanha
+            FROM public.biota_analise_consolidada
+            WHERE {' AND '.join(biota_conditions)}
+            ORDER BY nome_campanha
             """
         )
     df = pd.read_sql(query, conn, params=params)
@@ -210,14 +212,18 @@ def listar_grupos_biologicos(conn, projetos: list[str] | None = None, campanhas:
     params: dict[str, str] = {}
     conditions = ["grupo_biologico IS NOT NULL"]
     if projetos:
-        conditions.append(f"projeto IN ({_build_in_clause('projeto', projetos, params)})")
+        conditions.append(
+            f"nome_projeto IN ({_build_in_clause('projeto_biota', projetos, params)})"
+        )
     if campanhas:
-        conditions.append(f"campanha IN ({_build_in_clause('campanha', campanhas, params)})")
+        conditions.append(
+            f"nome_campanha IN ({_build_in_clause('campanha_biota', campanhas, params)})"
+        )
 
     query = text(
         f"""
         SELECT DISTINCT grupo_biologico
-        FROM public.vw_geo_biota
+        FROM public.biota_analise_consolidada
         WHERE {' AND '.join(conditions)}
         ORDER BY grupo_biologico
         """
