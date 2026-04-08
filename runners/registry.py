@@ -54,6 +54,12 @@ ACTIONS = {
         script="scripts/migrar_meio_fisico.py",
         expected_excel_name="Resultados_Meio_Fisico.xlsx",
     ),
+    "MIGRAR_AVIFAUNA": ActionSpec(
+        key="MIGRAR_AVIFAUNA",
+        label="Migrar Avifauna",
+        script="scripts/migrar_avifauna.py",
+        expected_excel_name="projeto_avifauna_real.xlsx",
+    ),
 
     # CONSOLIDAÇÃO
     "CONSOLIDAR": ActionSpec(
@@ -71,4 +77,5 @@ GROUP_TO_ACTION_KEY = {
     "Fitoplâncton": "MIGRAR_FITOPL",
     "Zooplâncton": "MIGRAR_ZOOPL",
     "Meio Físico": "MIGRAR_FISICO",
+    "Avifauna": "MIGRAR_AVIFAUNA",
 }
