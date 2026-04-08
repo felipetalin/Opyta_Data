@@ -3,7 +3,7 @@ from __future__ import annotations
 import pandas as pd
 import streamlit as st
 
-from app.ui.layout import inject_saas_styles, render_action_buttons, render_executive_summary
+from core.ui.layout import inject_saas_styles, render_action_buttons, render_executive_summary
 from .queries import ModoGeo
 
 
