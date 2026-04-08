@@ -62,6 +62,39 @@ def processar_e_consolidar(engine):
                 NULL AS medida_2,
                 tipo_amostragem
             FROM resultados_fitoplancton
+
+            UNION ALL
+
+            SELECT
+                id_esforco,
+                id_especie,
+                numero_de_individuos AS contagem,
+                NULL AS medida_1,
+                NULL AS medida_2,
+                tipo_amostragem
+            FROM resultados_avifauna
+
+            UNION ALL
+
+            SELECT
+                id_esforco,
+                id_especie,
+                numero_de_individuos AS contagem,
+                NULL AS medida_1,
+                NULL AS medida_2,
+                tipo_amostragem
+            FROM resultados_herpetofauna
+
+            UNION ALL
+
+            SELECT
+                id_esforco,
+                id_especie,
+                numero_de_individuos AS contagem,
+                NULL AS medida_1,
+                NULL AS medida_2,
+                tipo_amostragem
+            FROM resultados_mastofauna
         )
         SELECT
             cli.nome_empresa,
