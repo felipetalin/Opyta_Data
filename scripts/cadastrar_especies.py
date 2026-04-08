@@ -103,14 +103,45 @@ def cadastrar_especies_principal(connection, df_especies):
         "Raridade": "raridade",
     }
 
-    df_renamed = df_especies.rename(columns=_rename_base)
+    df_renamed = df_especies.rename(columns={**_rename_base, **_rename_terrestre})
 
-    # Injeta colunas terrestres ausentes como None (retrocompatível)
-    for excel_col, db_col in _rename_terrestre.items():
-        if excel_col in df_especies.columns:
-            df_renamed[db_col] = df_especies[excel_col]
-        else:
-            df_renamed[db_col] = None
+    # Garante retrocompatibilidade: qualquer coluna ausente vira NULL.
+    expected_db_cols = [
+        "nome_cientifico",
+        "nome_popular",
+        "grupo_biologico",
+        "reino",
+        "filo",
+        "classe",
+        "ordem",
+        "familia",
+        "genero",
+        "autor_e_ano",
+        "status_ameaca_nacional",
+        "status_ameaca_global",
+        "origem",
+        "habito_alimentar",
+        "estrategia_reprodutiva",
+        "valor_economico",
+        "observacoes",
+        "bmwp_score",
+        "status_estadual",
+        "status_copam",
+        "cites",
+        "guilda_alimentar",
+        "dependencia_florestal",
+        "endemismo",
+        "sensibilidade_ambiental",
+        "migratorio",
+        "raridade",
+    ]
+
+    for col in expected_db_cols:
+        if col not in df_renamed.columns:
+            df_renamed[col] = None
+
+    # Remove colunas extras da planilha para evitar binds inesperados.
+    df_renamed = df_renamed[expected_db_cols]
 
     df_renamed.replace(["N.A.", "n.a.", "NA"], np.nan, inplace=True)
 
