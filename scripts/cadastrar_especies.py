@@ -5,6 +5,7 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 import os
+import re
 
 import numpy as np
 import pandas as pd
@@ -19,6 +20,43 @@ from core.engine import get_engine
 
 # --- CONFIGURAÇÕES ---
 ARQUIVO_EXCEL_ESPECIES = "cadastro_especies_opyta.xlsx"
+
+
+def log_progress(percent: int, etapa: str):
+    """Imprime marcador de progresso para consumo pela UI."""
+    p = max(0, min(100, int(percent)))
+    print(f"[{p}%] {etapa}")
+
+
+def explain_error(exc: Exception) -> tuple[str, str]:
+    """Retorna causa provável e ação sugerida para erros comuns."""
+    msg = str(exc)
+
+    bind_match = re.search(r"bind parameter '([^']+)'", msg)
+    if bind_match:
+        col = bind_match.group(1)
+        return (
+            f"Coluna ausente na aba 'Especies' ou nome de coluna divergente: {col}.",
+            "Revise os cabeçalhos da planilha e confirme que os nomes estão no padrão esperado. "
+            "Se a coluna for opcional, verifique se o script em deploy está atualizado.",
+        )
+
+    if "relation" in msg.lower() and "does not exist" in msg.lower():
+        return (
+            "Tabela/visão não encontrada no banco.",
+            "Verifique se as migrations necessárias foram aplicadas no ambiente alvo.",
+        )
+
+    if "permission denied" in msg.lower():
+        return (
+            "Permissão insuficiente no banco para executar INSERT/UPDATE.",
+            "Valide as credenciais e permissões da role usada pela aplicação.",
+        )
+
+    return (
+        "Falha durante leitura da planilha ou gravação no banco.",
+        "Confira o log completo e valide formato das abas/colunas e conectividade com banco.",
+    )
 
 
 def cadastrar_dicionarios(connection, df_bacias, df_biomas):
@@ -293,9 +331,11 @@ def main():
     engine = None
 
     try:
+        log_progress(5, "Iniciando cadastro mestre")
         engine = get_engine()
         print(f"--- INICIANDO CADASTRO MESTRE: {ARQUIVO_EXCEL_ESPECIES} ---")
 
+        log_progress(15, "Lendo arquivo Excel")
         xls = pd.ExcelFile(ARQUIVO_EXCEL_ESPECIES)
 
         df_especies = pd.read_excel(xls, "Especies").dropna(how="all")
@@ -304,15 +344,22 @@ def main():
         df_endemismo = pd.read_excel(xls, "Endemismo").dropna(how="all") if "Endemismo" in xls.sheet_names else None
 
         with engine.begin() as connection:
+            log_progress(35, "Cadastrando dicionários (bacias/biomas)")
             cadastrar_dicionarios(connection, df_bacias, df_biomas)
+            log_progress(65, "Cadastrando espécies")
             cadastrar_especies_principal(connection, df_especies)
+            log_progress(85, "Cadastrando endemismo")
             cadastrar_endemismo(connection, df_endemismo)
 
+        log_progress(100, "Cadastro mestre concluído")
         print("\n--- CADASTRO MESTRE CONCLUÍDO COM SUCESSO ---")
 
     except Exception as e:
         print("\n--- ERRO DURANTE O CADASTRO MESTRE ---")
         print(e)
+        causa, acao = explain_error(e)
+        print(f"CAUSA_PROVAVEL: {causa}")
+        print(f"ACAO_SUGERIDA: {acao}")
         sys.exit(1)
     finally:
         if engine is not None:
