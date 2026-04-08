@@ -77,28 +77,28 @@ def _corrigir_coordenadas_invertidas(df: pd.DataFrame) -> pd.DataFrame:
     return work
 
 
-@st.cache_data(show_spinner=False)
+@st.cache_data(show_spinner=False, ttl=60)
 def carregar_projetos(modo: ModoGeo) -> list[str]:
     engine = get_engine()
     with engine.connect() as conn:
         return listar_projetos(conn, modo)
 
 
-@st.cache_data(show_spinner=False)
+@st.cache_data(show_spinner=False, ttl=60)
 def carregar_campanhas(modo: ModoGeo, projetos: list[str]) -> list[str]:
     engine = get_engine()
     with engine.connect() as conn:
         return listar_campanhas(conn, modo, projetos)
 
 
-@st.cache_data(show_spinner=False)
+@st.cache_data(show_spinner=False, ttl=60)
 def carregar_grupos_biologicos(projetos: list[str], campanhas: list[str]) -> list[str]:
     engine = get_engine()
     with engine.connect() as conn:
         return listar_grupos_biologicos(conn, projetos, campanhas)
 
 
-@st.cache_data(show_spinner=False)
+@st.cache_data(show_spinner=False, ttl=60)
 def carregar_dados_geo(
     modo: ModoGeo,
     projetos: list[str],

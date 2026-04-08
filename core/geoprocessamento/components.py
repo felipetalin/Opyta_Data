@@ -155,6 +155,7 @@ def render_data_quality_warning(df: pd.DataFrame, modo: ModoGeo, indicador: str)
 
 
 def reset_geo_filters() -> None:
+    st.cache_data.clear()
     for key in [
         "geo_projetos",
         "geo_campanhas",
