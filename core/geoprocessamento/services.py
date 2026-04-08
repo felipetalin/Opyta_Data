@@ -182,3 +182,44 @@ def calcular_resumo_geo(df: pd.DataFrame, modo: ModoGeo) -> dict[str, float]:
         )
 
     return resumo
+
+
+def preparar_dados_mapa_media_campanhas(df: pd.DataFrame, modo: ModoGeo) -> pd.DataFrame:
+    if df.empty:
+        return df
+
+    group_cols = ["projeto", "ponto", "latitude", "longitude"]
+    if modo == "Biota" and "grupo_biologico" in df.columns:
+        group_cols.append("grupo_biologico")
+
+    numeric_cols = [
+        c
+        for c in [
+            "pontos_amostrados",
+            "numero_taxons",
+            "riqueza",
+            "abundancia_total",
+            "biomassa_total",
+            "shannon",
+            "pielou",
+            "bmwp_total",
+            "riqueza_ept",
+            "abundancia_ept",
+        ]
+        if c in df.columns
+    ]
+
+    if not numeric_cols:
+        return df
+
+    agg_spec: dict[str, str] = {col: "mean" for col in numeric_cols}
+    if "campanha" in df.columns:
+        agg_spec["campanha"] = "nunique"
+
+    out = df.groupby(group_cols, dropna=False, as_index=False).agg(agg_spec)
+
+    if "campanha" in out.columns:
+        out = out.rename(columns={"campanha": "campanhas_agregadas"})
+        out["campanha"] = out["campanhas_agregadas"].apply(lambda n: f"Media de {int(n)} campanha(s)")
+
+    return out

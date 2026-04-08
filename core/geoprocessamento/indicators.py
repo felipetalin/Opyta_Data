@@ -92,6 +92,10 @@ def calcular_indicadores_por_ponto(df: pd.DataFrame) -> pd.DataFrame:
             "bmwp_total",
             "riqueza_ept",
             "abundancia_ept",
+            "bmwp_registros_com_score",
+            "bmwp_registros_sem_score",
+            "ept_registros_com_ordem",
+            "ept_registros_sem_ordem",
         ])
 
     work = df.copy()
@@ -104,11 +108,36 @@ def calcular_indicadores_por_ponto(df: pd.DataFrame) -> pd.DataFrame:
         shannon = _shannon_from_group(group)
         pielou = _pielou(shannon, richness)
 
-        grupo_biologico = str(group["grupo_biologico"].iloc[0]).strip().lower() if "grupo_biologico" in group.columns else ""
-        is_zoobentos = grupo_biologico in {"zoobentos", "bentos"}
+        grupo_biologico = _norm_text(group["grupo_biologico"].iloc[0]) if "grupo_biologico" in group.columns else ""
+        is_zoobentos = (
+            grupo_biologico in {"zoobentos", "bentos", "macrozoobentos", "macroinvertebrados bentonicos"}
+            or "bento" in grupo_biologico
+        )
 
         bmwp_total = _bmwp_from_group(group) if is_zoobentos else 0.0
         riqueza_ept, abundancia_ept = _ept_metrics(group) if is_zoobentos else (0, 0.0)
+
+        if is_zoobentos and "bmwp_score" in group.columns:
+            bmwp_scores = pd.to_numeric(group["bmwp_score"], errors="coerce")
+            bmwp_registros_com_score = int(bmwp_scores.notna().sum())
+            bmwp_registros_sem_score = int(bmwp_scores.isna().sum())
+        elif is_zoobentos:
+            bmwp_registros_com_score = 0
+            bmwp_registros_sem_score = int(len(group))
+        else:
+            bmwp_registros_com_score = 0
+            bmwp_registros_sem_score = 0
+
+        if is_zoobentos and "ordem" in group.columns:
+            ordens = group["ordem"].apply(_norm_text)
+            ept_registros_com_ordem = int((ordens != "").sum())
+            ept_registros_sem_ordem = int((ordens == "").sum())
+        elif is_zoobentos:
+            ept_registros_com_ordem = 0
+            ept_registros_sem_ordem = int(len(group))
+        else:
+            ept_registros_com_ordem = 0
+            ept_registros_sem_ordem = 0
 
         row = {
             "projeto": keys[0],
@@ -126,6 +155,10 @@ def calcular_indicadores_por_ponto(df: pd.DataFrame) -> pd.DataFrame:
             "bmwp_total": float(bmwp_total),
             "riqueza_ept": int(riqueza_ept),
             "abundancia_ept": float(abundancia_ept),
+            "bmwp_registros_com_score": bmwp_registros_com_score,
+            "bmwp_registros_sem_score": bmwp_registros_sem_score,
+            "ept_registros_com_ordem": ept_registros_com_ordem,
+            "ept_registros_sem_ordem": ept_registros_sem_ordem,
         }
         rows.append(row)
 

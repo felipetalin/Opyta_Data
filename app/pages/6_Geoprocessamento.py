@@ -15,6 +15,7 @@ from core.geoprocessamento.components import (
     render_campaign_filter,
     render_cards,
     render_context_bar,
+    render_data_quality_warning,
     render_empty_state,
     render_header,
     render_indicator_selector,
@@ -31,10 +32,11 @@ from core.geoprocessamento.services import (
     carregar_dados_geo,
     carregar_grupos_biologicos,
     carregar_projetos,
+    preparar_dados_mapa_media_campanhas,
 )
 
 
-st.set_page_config(page_title="Geoambiental | Biodiversidade e Qualidade da Água", layout="wide")
+st.set_page_config(page_title="Geoambiental | Indicadores ecológicos e do meio físico", layout="wide")
 
 if not st.session_state.get("logged_in"):
     st.switch_page("main.py")
@@ -69,8 +71,10 @@ with col3:
 
 with st.spinner("Carregando dados geográficos..."):
     df_geo = carregar_dados_geo(modo, projetos_sel, campanhas_sel, grupos_sel)
+    df_geo_mapa = preparar_dados_mapa_media_campanhas(df_geo, modo)
 
 indicador = render_indicator_selector(modo, df_geo)
+render_data_quality_warning(df_geo, modo, indicador)
 
 resumo = calcular_resumo_geo(df_geo, modo)
 
@@ -95,7 +99,7 @@ if df_geo.empty:
 else:
     map_col, rank_col = st.columns([3, 1], gap="large")
     with map_col:
-        render_mapa_geo(df_geo, modo, indicador)
+        render_mapa_geo(df_geo_mapa, modo, indicador)
     with rank_col:
         render_ranking(df_geo, indicador)
 render_table(df_geo, indicador=indicador)

@@ -10,7 +10,7 @@ VALID_MODES: list[ModoGeo] = ["Fisico", "Biota"]
 
 
 def render_header() -> None:
-    st.title("Geoambiental | Biodiversidade e Qualidade da Água")
+    st.title("Geoambiental | Indicadores ecológicos e do meio físico")
     st.markdown(
         "📌 **Geoprocessamento:** Visualize qualidade da água e biodiversidade no mapa interativo.\n"
         "\n"
@@ -103,6 +103,37 @@ def render_context_bar(
             ]
         )
     )
+
+
+def render_data_quality_warning(df: pd.DataFrame, modo: ModoGeo, indicador: str) -> None:
+    if modo != "Biota" or df.empty:
+        return
+
+    total_pontos = int(df["ponto"].nunique()) if "ponto" in df.columns else 0
+    if total_pontos <= 0:
+        return
+
+    if indicador == "bmwp_total" and "bmwp_registros_com_score" in df.columns:
+        pontos_com_bmwp = int((pd.to_numeric(df["bmwp_registros_com_score"], errors="coerce").fillna(0) > 0).sum())
+        if pontos_com_bmwp == 0:
+            st.warning(
+                "BMWP está zerado porque não há `bmwp_score` preenchido nos dados filtrados."
+            )
+        elif pontos_com_bmwp < total_pontos:
+            st.info(
+                f"BMWP parcial: {pontos_com_bmwp}/{total_pontos} ponto(s) possuem `bmwp_score` preenchido."
+            )
+
+    if indicador in {"riqueza_ept", "abundancia_ept"} and "ept_registros_com_ordem" in df.columns:
+        pontos_com_ordem = int((pd.to_numeric(df["ept_registros_com_ordem"], errors="coerce").fillna(0) > 0).sum())
+        if pontos_com_ordem == 0:
+            st.warning(
+                "EPT está zerado porque não há `ordem` taxonômica preenchida nos dados filtrados."
+            )
+        elif pontos_com_ordem < total_pontos:
+            st.info(
+                f"EPT parcial: {pontos_com_ordem}/{total_pontos} ponto(s) possuem `ordem` preenchida."
+            )
 
 
 def reset_geo_filters() -> None:
