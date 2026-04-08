@@ -45,8 +45,8 @@ def build_leafmap(df: pd.DataFrame, modo: str, indicador: str):
     m.add_basemap("SATELLITE")
 
     min_v, max_v = _value_range(df, indicador)
-    colormap = cm.LinearColormap(["#fde68a", "#f59e0b", "#dc2626"], vmin=min_v, vmax=max_v)
-    colormap.caption = f"Indicador: {indicador}"
+    colormap = cm.LinearColormap(["#dcfce7", "#facc15", "#f97316", "#dc2626"], vmin=min_v, vmax=max_v)
+    colormap.caption = f"Escala do indicador: {indicador}"
 
     layer_name = "Pontos Biota" if modo == "Biota" else "Pontos Fisico"
     feature_group = folium.FeatureGroup(name=layer_name)
@@ -56,11 +56,30 @@ def build_leafmap(df: pd.DataFrame, modo: str, indicador: str):
         radius = _radius_for_value(value, min_v, max_v)
         color = colormap(value)
 
+        tooltip_parts = [
+            f"Projeto: {row.get('projeto', '-')}",
+            f"Empreendimento: {row.get('empreendimento', row.get('projeto', '-'))}",
+            f"Campanha: {row.get('campanha', '-')}",
+            f"Ponto: {row.get('ponto', '-')}",
+            f"{indicador}: {value:.3f}",
+        ]
+        if "riqueza" in row.index:
+            tooltip_parts.append(f"Riqueza: {float(pd.to_numeric(row.get('riqueza', 0), errors='coerce') or 0):.2f}")
+        if "shannon" in row.index:
+            tooltip_parts.append(f"Diversidade: {float(pd.to_numeric(row.get('shannon', 0), errors='coerce') or 0):.2f}")
+        if "abundancia_total" in row.index:
+            tooltip_parts.append(f"Abundancia: {float(pd.to_numeric(row.get('abundancia_total', 0), errors='coerce') or 0):.0f}")
+        if "iqa" in row.index:
+            tooltip_parts.append(f"IQA: {float(pd.to_numeric(row.get('iqa', 0), errors='coerce') or 0):.1f}")
+
         popup_html = (
             f"<b>Projeto:</b> {row.get('projeto', '-')}<br>"
+            f"<b>Empreendimento:</b> {row.get('empreendimento', row.get('projeto', '-'))}<br>"
             f"<b>Campanha:</b> {row.get('campanha', '-')}<br>"
             f"<b>Ponto:</b> {row.get('ponto', '-')}<br>"
-            f"<b>{indicador}:</b> {value:.3f}"
+            f"<b>{indicador}:</b> {value:.3f}<br>"
+            f"<b>Latitude:</b> {float(row.get('latitude', 0)):.5f}<br>"
+            f"<b>Longitude:</b> {float(row.get('longitude', 0)):.5f}"
         )
 
         folium.CircleMarker(
@@ -70,10 +89,12 @@ def build_leafmap(df: pd.DataFrame, modo: str, indicador: str):
             weight=1,
             fill=True,
             fill_opacity=0.8,
+            tooltip=folium.Tooltip("<br>".join(tooltip_parts), sticky=True),
             popup=folium.Popup(popup_html, max_width=320),
         ).add_to(feature_group)
 
     feature_group.add_to(m)
+    folium.LayerControl(collapsed=False).add_to(m)
     colormap.add_to(m)
     return m
 

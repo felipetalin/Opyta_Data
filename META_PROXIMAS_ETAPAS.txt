@@ -1,0 +1,33 @@
+META DAS PROXIMAS ETAPAS
+
+Transformar o sistema em uma plataforma analitica coerente, previsivel e confiavel, onde cada etapa do fluxo seja clara para o usuario, os dados transmitam seguranca operacional e a interface apoie tomada de decisao, nao apenas execucao tecnica.
+
+DIRECIONADORES
+
+1. Consolidar um padrao unico de experiencia entre todas as telas.
+   A evolucao visual nao deve acontecer por pagina isolada, mas como linguagem comum de produto: feedback claro, hierarquia visual consistente, estados padronizados, alertas compreensiveis e acoes objetivas.
+
+2. Estruturar o sistema como um pipeline assistido.
+   O usuario deve entender com facilidade em que etapa esta, o que ja foi concluido, o que depende de validacao e o que esta pronto para analise, reduzindo dependencia de memoria operacional.
+
+3. Fortalecer rastreabilidade e confianca nos dados.
+   O sistema deve comunicar qualidade, consistencia, cobertura e eventuais riscos dos dados de forma visivel, reduzindo dependencia de log tecnico e aumentando percepcao de robustez.
+
+4. Evoluir a camada analitica para leitura executiva.
+   As telas de analise e geoambiental devem priorizar interpretacao, comparacao, priorizacao e identificacao de padroes, transformando dados processados em informacao util para decisao.
+
+5. Reduzir retrabalho e aumentar previsibilidade de manutencao.
+   A arquitetura de interface e feedback deve ser modular e reutilizavel, permitindo que futuras evolucoes mantenham consistencia visual, funcional e operacional.
+
+LEITURA ESTRATEGICA
+
+Fase 1 foi fazer funcionar.
+Fase 2 foi deixar apresentavel.
+Fase 3 deve ser deixar coerente, rastreavel e previsivel.
+
+PRIORIDADE RECOMENDADA
+
+1. Criar um padrao unico de experiencia entre todas as etapas.
+2. Criar um painel de status operacional do pipeline.
+3. Criar uma camada de auditoria e qualidade de dados.
+4. Aprofundar inteligencia analitica em Geoambiental e Analises.

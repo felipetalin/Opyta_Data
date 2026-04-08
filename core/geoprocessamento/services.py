@@ -9,7 +9,9 @@ from .queries import (
     ModoGeo,
     get_geo_biota,
     get_geo_fisico,
+    get_geo_fisico_com_empreendimento,
     listar_campanhas,
+    listar_empreendimentos,
     listar_grupos_biologicos,
     listar_projetos,
 )
@@ -88,20 +90,43 @@ def carregar_projetos(modo: ModoGeo) -> list[str]:
 def carregar_campanhas(modo: ModoGeo, projetos: list[str]) -> list[str]:
     engine = get_engine()
     with engine.connect() as conn:
-        return listar_campanhas(conn, modo, projetos)
+        return listar_campanhas(conn, modo, projetos, [])
 
 
 @st.cache_data(show_spinner=False, ttl=60)
-def carregar_grupos_biologicos(projetos: list[str], campanhas: list[str]) -> list[str]:
+def carregar_empreendimentos(modo: ModoGeo, projetos: list[str]) -> list[str]:
     engine = get_engine()
     with engine.connect() as conn:
-        return listar_grupos_biologicos(conn, projetos, campanhas)
+        return listar_empreendimentos(conn, modo, projetos)
+
+
+@st.cache_data(show_spinner=False, ttl=60)
+def carregar_campanhas_filtradas(
+    modo: ModoGeo,
+    projetos: list[str],
+    empreendimentos: list[str],
+) -> list[str]:
+    engine = get_engine()
+    with engine.connect() as conn:
+        return listar_campanhas(conn, modo, projetos, empreendimentos)
+
+
+@st.cache_data(show_spinner=False, ttl=60)
+def carregar_grupos_biologicos(
+    projetos: list[str],
+    empreendimentos: list[str],
+    campanhas: list[str],
+) -> list[str]:
+    engine = get_engine()
+    with engine.connect() as conn:
+        return listar_grupos_biologicos(conn, projetos, empreendimentos, campanhas)
 
 
 @st.cache_data(show_spinner=False, ttl=60)
 def carregar_dados_geo(
     modo: ModoGeo,
     projetos: list[str],
+    empreendimentos: list[str],
     campanhas: list[str],
     grupos_biologicos: list[str] | None = None,
 ) -> pd.DataFrame:
@@ -109,9 +134,12 @@ def carregar_dados_geo(
 
     with engine.connect() as conn:
         if modo == "Fisico":
-            df = get_geo_fisico(conn, projetos, campanhas)
+            if empreendimentos:
+                df = get_geo_fisico_com_empreendimento(conn, projetos, empreendimentos, campanhas)
+            else:
+                df = get_geo_fisico_com_empreendimento(conn, projetos, [], campanhas)
         else:
-            df = get_geo_biota(conn, projetos, campanhas, grupos_biologicos)
+            df = get_geo_biota(conn, projetos, empreendimentos, campanhas, grupos_biologicos)
 
     if df.empty:
         return df
