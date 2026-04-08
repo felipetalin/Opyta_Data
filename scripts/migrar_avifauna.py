@@ -57,6 +57,12 @@ def normalizar_texto(valor):
     return valor if valor else None
 
 
+def normalizar_grupo(valor):
+    if pd.isna(valor):
+        return None
+    return str(valor).strip().lower()
+
+
 def normalizar_numero(valor):
     if pd.isna(valor):
         return None
@@ -317,7 +323,8 @@ def migrar_dados(connection, df_capa, df_pontos, df_esforco, df_resultados, tabe
 
     esforcos_records = []
     df_esforco_filtrado = df_esforco[
-        df_esforco["Grupo_Biologico"].astype(str).str.strip() == GRUPO_BIOLOGICO_ALVO
+        df_esforco["Grupo_Biologico"].apply(normalizar_grupo)
+        == normalizar_grupo(GRUPO_BIOLOGICO_ALVO)
     ].copy()
 
     for _, row in df_esforco_filtrado.iterrows():
