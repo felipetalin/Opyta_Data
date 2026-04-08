@@ -47,6 +47,14 @@ VALIDATORS: Dict[str, Validator] = {
         "Avifauna",
         ["Capa_Projeto", "Pontos_e_Campanhas", "Metadados_Esforco", "Resultados_Avifauna"],
     ),
+    "Herpetofauna": RequiredSheetsValidator(
+        "Herpetofauna",
+        ["Capa_Projeto", "Pontos_e_Campanhas", "Metadados_Esforco", "Resultados_Herpetofauna"],
+    ),
+    "Mastofauna": RequiredSheetsValidator(
+        "Mastofauna",
+        ["Capa_Projeto", "Pontos_e_Campanhas", "Metadados_Esforco", "Resultados_Mastofauna"],
+    ),
 
     # ✅ MEIO FÍSICO (SEM esforço)
     "Meio Físico": RequiredSheetsValidator(

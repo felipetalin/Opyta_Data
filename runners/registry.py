@@ -60,6 +60,18 @@ ACTIONS = {
         script="scripts/migrar_avifauna.py",
         expected_excel_name="projeto_avifauna_real.xlsx",
     ),
+    "MIGRAR_HERPETOFAUNA": ActionSpec(
+        key="MIGRAR_HERPETOFAUNA",
+        label="Migrar Herpetofauna",
+        script="scripts/migrar_herpetofauna.py",
+        expected_excel_name="projeto_herpetofauna_real.xlsx",
+    ),
+    "MIGRAR_MASTOFAUNA": ActionSpec(
+        key="MIGRAR_MASTOFAUNA",
+        label="Migrar Mastofauna",
+        script="scripts/migrar_mastofauna.py",
+        expected_excel_name="projeto_mastofauna_real.xlsx",
+    ),
 
     # CONSOLIDAÇÃO
     "CONSOLIDAR": ActionSpec(
@@ -78,4 +90,6 @@ GROUP_TO_ACTION_KEY = {
     "Zooplâncton": "MIGRAR_ZOOPL",
     "Meio Físico": "MIGRAR_FISICO",
     "Avifauna": "MIGRAR_AVIFAUNA",
+    "Herpetofauna": "MIGRAR_HERPETOFAUNA",
+    "Mastofauna": "MIGRAR_MASTOFAUNA",
 }
