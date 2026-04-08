@@ -444,6 +444,12 @@ def migrar_dados(connection, df_capa, df_pontos, df_esforco, df_resultados, tabe
         .reset_index()
     )
 
+    logger.info(
+        "Resultados: %s linha(s) no Excel, %s combinação(ões) após agregação.",
+        len(df_resultados),
+        len(df_resultados_agregado),
+    )
+
     resultados_records = []
     warnings_especies = set()
     warnings_esforcos = 0
@@ -502,6 +508,13 @@ def migrar_dados(connection, df_capa, df_pontos, df_esforco, df_resultados, tabe
                 observacoes = EXCLUDED.observacoes
         """)
         connection.execute(query_resultados, resultados_records)
+
+    logger.info(
+        "Resultados mapeados: %s; descartados por mapeamento/campos: %s; táxons ausentes no cadastro: %s",
+        len(resultados_records),
+        warnings_esforcos,
+        len(warnings_especies),
+    )
 
     logger.info(f"{len(resultados_records)} registros de resultados inseridos/atualizados.")
 
