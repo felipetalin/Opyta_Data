@@ -34,6 +34,13 @@ def extrair_sinal_e_valor(resultado_str):
     return None, None
 
 
+def norm_text(value):
+    if pd.isna(value):
+        return None
+    s = str(value).strip()
+    return s if s else None
+
+
 def main():
     load_dotenv()
     engine = None
@@ -109,12 +116,16 @@ def main():
             camp_map = pd.read_sql(
                 text("SELECT id_campanha, nome_campanha FROM campanhas"),
                 conn,
-            ).set_index("nome_campanha")["id_campanha"].to_dict()
+            )
+            camp_map = {
+                norm_text(r["nome_campanha"]): r["id_campanha"]
+                for _, r in camp_map.iterrows()
+            }
 
             # 4. SINCRONIZAR PONTOS
             print("-> Sincronizando pontos...")
             for _, row in df_pts_camp.iterrows():
-                id_c = camp_map.get(str(row["Campanha"]).strip())
+                id_c = camp_map.get(norm_text(row.get("Campanha")))
                 data_c = pd.to_datetime(row["Data"], errors="coerce")
 
                 conn.execute(
@@ -131,14 +142,12 @@ def main():
                         VALUES (:id_p, :id_c, :nom, :lat, :lon, :bac, :dat)
                         ON CONFLICT (id_projeto, id_campanha, nome_ponto)
                             WHERE id_empreendimento IS NULL
-                        DO UPDATE SET
-                            latitude = EXCLUDED.latitude,
-                            longitude = EXCLUDED.longitude
+                        DO NOTHING
                     """),
                     {
                         "id_p": id_projeto,
                         "id_c": id_c,
-                        "nom": str(row["Ponto"]).strip(),
+                        "nom": norm_text(row.get("Ponto")),
                         "lat": row.get("Latitude"),
                         "lon": row.get("Longitude"),
                         "bac": row.get("Bacia_Hidrografica"),
@@ -152,24 +161,50 @@ def main():
                 conn,
             ).set_index(["nome_parametro", "matriz"])["id_parametro"].to_dict()
 
-            pts_db = pd.read_sql(
+            pts_db_df = pd.read_sql(
                 text("""
-                    SELECT id_ponto_coleta, nome_ponto
-                    FROM pontos_coleta
-                    WHERE id_projeto = :p
+                    SELECT pc.id_ponto_coleta, pc.nome_ponto, ca.nome_campanha
+                    FROM pontos_coleta pc
+                    JOIN campanhas ca ON ca.id_campanha = pc.id_campanha
+                    WHERE pc.id_projeto = :p
                 """),
                 conn,
                 params={"p": id_projeto},
-            ).set_index("nome_ponto")["id_ponto_coleta"].to_dict()
+            )
+
+            pts_db_map: dict[tuple[str, str], int] = {}
+            pts_db_by_ponto: dict[str, list[int]] = {}
+            for _, r in pts_db_df.iterrows():
+                camp = norm_text(r.get("nome_campanha"))
+                ponto = norm_text(r.get("nome_ponto"))
+                if camp and ponto:
+                    pts_db_map[(camp, ponto)] = int(r["id_ponto_coleta"])
+                if ponto:
+                    pts_db_by_ponto.setdefault(ponto, []).append(int(r["id_ponto_coleta"]))
 
             # 6. PROCESSAR E INSERIR RESULTADOS (UPSERT)
             print(f"-> Migrando {len(df_res)} resultados...")
 
             res_records = []
             warn_params = set()
+            warn_points = set()
+            warn_points_ambiguous = set()
+            has_campanha_in_result = "campanha" in df_res.columns
 
             for _, row in df_res.iterrows():
-                id_p = pts_db.get(str(row["ponto"]).strip())
+                ponto = norm_text(row.get("ponto"))
+                campanha = norm_text(row.get("campanha")) if has_campanha_in_result else None
+
+                id_p = None
+                if campanha and ponto:
+                    id_p = pts_db_map.get((campanha, ponto))
+                elif ponto:
+                    candidates = pts_db_by_ponto.get(ponto, [])
+                    if len(candidates) == 1:
+                        id_p = candidates[0]
+                    elif len(candidates) > 1:
+                        warn_points_ambiguous.add(ponto)
+
                 id_pr = param_dict.get((str(row["parametro"]).strip(), str(row["matriz"]).strip()))
 
                 if id_p and id_pr:
@@ -191,6 +226,11 @@ def main():
                 else:
                     if not id_pr:
                         warn_params.add(f"{row['parametro']} ({row['matriz']})")
+                    if not id_p and ponto:
+                        if campanha:
+                            warn_points.add(f"{campanha} / {ponto}")
+                        elif ponto not in warn_points_ambiguous:
+                            warn_points.add(ponto)
 
             if res_records:
                 conn.execute(
@@ -218,6 +258,15 @@ def main():
 
             if warn_params:
                 print(f"⚠️ Parâmetros não cadastrados no mestre: {list(warn_params)}")
+
+            if warn_points_ambiguous:
+                print(
+                    "⚠️ Pontos ambíguos na aba de resultados (mesmo nome em múltiplas campanhas). "
+                    f"Inclua a coluna 'Campanha' em Resultados_Meio_Fisico: {sorted(list(warn_points_ambiguous))}"
+                )
+
+            if warn_points:
+                print(f"⚠️ Pontos não mapeados para id_ponto_coleta: {sorted(list(warn_points))}")
 
     except Exception as e:
         print("\n--- ERRO DURANTE A MIGRAÇÃO DO MEIO FÍSICO ---")
