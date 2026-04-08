@@ -193,7 +193,9 @@ def migrar_dados(connection, df_capa, df_pontos, df_esforco, df_resultados):
                 :id_projeto, :id_campanha, :nome_ponto, :data_hora_coleta,
                 :latitude, :longitude, :bacia_hidrografica
             )
-            ON CONFLICT (id_projeto, id_campanha, nome_ponto) DO NOTHING
+            ON CONFLICT (id_projeto, id_campanha, nome_ponto)
+                WHERE id_empreendimento IS NULL
+            DO NOTHING
             """
         )
         connection.execute(query_pontos, pontos_records)

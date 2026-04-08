@@ -68,28 +68,49 @@ def cadastrar_especies_principal(connection, df_especies):
         print("  Aviso: Nenhuma espécie para processar na planilha.")
         return
 
-    df_renamed = df_especies.rename(
-        columns={
-            "Nome_Cientifico": "nome_cientifico",
-            "Nome_Popular": "nome_popular",
-            "Grupo_Biologico": "grupo_biologico",
-            "Reino": "reino",
-            "Filo": "filo",
-            "Classe": "classe",
-            "Ordem": "ordem",
-            "Familia": "familia",
-            "Genero": "genero",
-            "Autor_e_Ano": "autor_e_ano",
-            "Status_Ameaca_Nacional": "status_ameaca_nacional",
-            "Status_Ameaca_Global": "status_ameaca_global",
-            "Origem": "origem",
-            "Habito_Alimentar": "habito_alimentar",
-            "Estrategia_Reprodutiva": "estrategia_reprodutiva",
-            "Valor_Economico": "valor_economico",
-            "Observacoes": "observacoes",
-            "BMWP_Score": "bmwp_score",
-        }
-    )
+    # Colunas obrigatórias (já existiam na tabela)
+    _rename_base = {
+        "Nome_Cientifico": "nome_cientifico",
+        "Nome_Popular": "nome_popular",
+        "Grupo_Biologico": "grupo_biologico",
+        "Reino": "reino",
+        "Filo": "filo",
+        "Classe": "classe",
+        "Ordem": "ordem",
+        "Familia": "familia",
+        "Genero": "genero",
+        "Autor_e_Ano": "autor_e_ano",
+        "Status_Ameaca_Nacional": "status_ameaca_nacional",
+        "Status_Ameaca_Global": "status_ameaca_global",
+        "Origem": "origem",
+        "Habito_Alimentar": "habito_alimentar",
+        "Estrategia_Reprodutiva": "estrategia_reprodutiva",
+        "Valor_Economico": "valor_economico",
+        "Observacoes": "observacoes",
+        "BMWP_Score": "bmwp_score",
+    }
+
+    # Colunas opcionais para fauna terrestre (migration 002)
+    _rename_terrestre = {
+        "Status_Estadual": "status_estadual",
+        "Status_Copam": "status_copam",
+        "Cites": "cites",
+        "Guilda_Alimentar": "guilda_alimentar",
+        "Dependencia_Florestal": "dependencia_florestal",
+        "Endemismo": "endemismo",
+        "Sensibilidade_Ambiental": "sensibilidade_ambiental",
+        "Migratorio": "migratorio",
+        "Raridade": "raridade",
+    }
+
+    df_renamed = df_especies.rename(columns=_rename_base)
+
+    # Injeta colunas terrestres ausentes como None (retrocompatível)
+    for excel_col, db_col in _rename_terrestre.items():
+        if excel_col in df_especies.columns:
+            df_renamed[db_col] = df_especies[excel_col]
+        else:
+            df_renamed[db_col] = None
 
     df_renamed.replace(["N.A.", "n.a.", "NA"], np.nan, inplace=True)
 
@@ -109,13 +130,19 @@ def cadastrar_especies_principal(connection, df_especies):
                 nome_cientifico, nome_popular, grupo_biologico, reino, filo, classe,
                 ordem, familia, genero, autor_e_ano, status_ameaca_nacional,
                 status_ameaca_global, origem, habito_alimentar, estrategia_reprodutiva,
-                valor_economico, observacoes, bmwp_score
+                valor_economico, observacoes, bmwp_score,
+                status_estadual, status_copam, cites, guilda_alimentar,
+                dependencia_florestal, endemismo, sensibilidade_ambiental,
+                migratorio, raridade
             )
             VALUES (
                 :nome_cientifico, :nome_popular, :grupo_biologico, :reino, :filo, :classe,
                 :ordem, :familia, :genero, :autor_e_ano, :status_ameaca_nacional,
                 :status_ameaca_global, :origem, :habito_alimentar, :estrategia_reprodutiva,
-                :valor_economico, :observacoes, :bmwp_score
+                :valor_economico, :observacoes, :bmwp_score,
+                :status_estadual, :status_copam, :cites, :guilda_alimentar,
+                :dependencia_florestal, :endemismo, :sensibilidade_ambiental,
+                :migratorio, :raridade
             )
             ON CONFLICT (nome_cientifico)
             DO UPDATE SET
@@ -135,7 +162,16 @@ def cadastrar_especies_principal(connection, df_especies):
                 estrategia_reprodutiva = EXCLUDED.estrategia_reprodutiva,
                 valor_economico = EXCLUDED.valor_economico,
                 observacoes = EXCLUDED.observacoes,
-                bmwp_score = EXCLUDED.bmwp_score
+                bmwp_score = EXCLUDED.bmwp_score,
+                status_estadual = EXCLUDED.status_estadual,
+                status_copam = EXCLUDED.status_copam,
+                cites = EXCLUDED.cites,
+                guilda_alimentar = EXCLUDED.guilda_alimentar,
+                dependencia_florestal = EXCLUDED.dependencia_florestal,
+                endemismo = EXCLUDED.endemismo,
+                sensibilidade_ambiental = EXCLUDED.sensibilidade_ambiental,
+                migratorio = EXCLUDED.migratorio,
+                raridade = EXCLUDED.raridade
             """
         )
         connection.execute(query, records_to_insert)

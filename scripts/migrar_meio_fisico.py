@@ -130,6 +130,7 @@ def main():
                         )
                         VALUES (:id_p, :id_c, :nom, :lat, :lon, :bac, :dat)
                         ON CONFLICT (id_projeto, id_campanha, nome_ponto)
+                            WHERE id_empreendimento IS NULL
                         DO UPDATE SET
                             latitude = EXCLUDED.latitude,
                             longitude = EXCLUDED.longitude
