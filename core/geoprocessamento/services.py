@@ -4,7 +4,7 @@ import pandas as pd
 import streamlit as st
 
 from core.engine import get_engine
-from .indicators import calcular_indicadores_por_ponto
+from .indicators import calcular_indicadores_fisicos_por_ponto, calcular_indicadores_por_ponto
 from .queries import (
     ModoGeo,
     get_geo_biota,
@@ -126,9 +126,7 @@ def carregar_dados_geo(
         df = _padronizar_colunas_biota(df)
         return calcular_indicadores_por_ponto(df)
 
-    df["pontos_amostrados"] = 1
-
-    return df
+    return calcular_indicadores_fisicos_por_ponto(df)
 
 
 def calcular_resumo_geo(df: pd.DataFrame, modo: ModoGeo) -> dict[str, float]:
@@ -137,6 +135,9 @@ def calcular_resumo_geo(df: pd.DataFrame, modo: ModoGeo) -> dict[str, float]:
             "projetos": 0,
             "campanhas": 0,
             "pontos": 0,
+            "iqa_medio": 0.0,
+            "parametros_nao_conformes": 0.0,
+            "parametros_com_limite": 0.0,
             "riqueza_media": 0.0,
             "abundancia_total": 0.0,
             "biomassa_total": 0.0,
@@ -170,6 +171,9 @@ def calcular_resumo_geo(df: pd.DataFrame, modo: ModoGeo) -> dict[str, float]:
     else:
         resumo.update(
             {
+                "iqa_medio": float(df["iqa"].mean()) if "iqa" in df.columns and not df.empty else 0.0,
+                "parametros_nao_conformes": float(df["parametros_nao_conformes"].sum()) if "parametros_nao_conformes" in df.columns else 0.0,
+                "parametros_com_limite": float(df["parametros_com_limite"].sum()) if "parametros_com_limite" in df.columns else 0.0,
                 "riqueza_media": float(df["ponto"].nunique()) if "ponto" in df.columns else 0.0,
                 "abundancia_total": float(df["pontos_amostrados"].sum()) if "pontos_amostrados" in df.columns else 0.0,
                 "biomassa_total": 0.0,
@@ -200,6 +204,10 @@ def preparar_dados_mapa_media_campanhas(df: pd.DataFrame, modo: ModoGeo) -> pd.D
             "riqueza",
             "abundancia_total",
             "biomassa_total",
+            "iqa",
+            "parametros_nao_conformes",
+            "parametros_avaliados",
+            "parametros_com_limite",
             "shannon",
             "pielou",
             "bmwp_total",

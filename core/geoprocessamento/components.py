@@ -12,7 +12,7 @@ VALID_MODES: list[ModoGeo] = ["Fisico", "Biota"]
 def render_header() -> None:
     st.title("Geoambiental | Indicadores ecológicos e do meio físico")
     st.markdown(
-        "📌 **Geoprocessamento:** Visualize qualidade da água e biodiversidade no mapa interativo.\n"
+        "📌 **Geoprocessamento:** Visualize indicadores ecológicos e do meio físico no mapa interativo.\n"
         "\n"
         "**Passos:**\n"
         "1. Escolha o modo (Físico ou Biota)  \n"
@@ -60,14 +60,16 @@ def render_biological_group_filter(grupos: list[str], disabled: bool = False) ->
 
 def render_indicator_selector(modo: ModoGeo, df: pd.DataFrame) -> str:
     if modo != "Biota":
-        st.selectbox(
+        options = [
+            "iqa",
+            "parametros_nao_conformes",
+        ]
+        return st.selectbox(
             "Indicador do mapa",
-            options=["pontos_amostrados"],
+            options=options,
             index=0,
-            disabled=True,
             key="geo_indicador_fisico",
         )
-        return "pontos_amostrados"
 
     options = [
         "riqueza",
@@ -106,7 +108,23 @@ def render_context_bar(
 
 
 def render_data_quality_warning(df: pd.DataFrame, modo: ModoGeo, indicador: str) -> None:
-    if modo != "Biota" or df.empty:
+    if df.empty:
+        return
+
+    if modo == "Fisico":
+        st.info("Neste estágio, o modo Físico considera indicadores de Água Superficial.")
+        total_pontos = int(df["ponto"].nunique()) if "ponto" in df.columns else 0
+        if indicador == "iqa" and "parametros_com_limite" in df.columns and total_pontos > 0:
+            pontos_com_limite = int((pd.to_numeric(df["parametros_com_limite"], errors="coerce").fillna(0) > 0).sum())
+            if pontos_com_limite == 0:
+                st.warning("IQA está zerado porque não há parâmetros com limite regulatório disponível nos dados filtrados.")
+            elif pontos_com_limite < total_pontos:
+                st.info(
+                    f"IQA parcial: {pontos_com_limite}/{total_pontos} ponto(s) possuem parâmetros com limite para cálculo."
+                )
+        return
+
+    if modo != "Biota":
         return
 
     total_pontos = int(df["ponto"].nunique()) if "ponto" in df.columns else 0
@@ -149,18 +167,30 @@ def reset_geo_filters() -> None:
 
 
 def render_cards(resumo: dict[str, float], modo: ModoGeo) -> None:
-    st.subheader("Indicadores ecológicos")
+    st.subheader("Indicadores ecológicos" if modo == "Biota" else "Indicadores do meio físico")
     c1, c2, c3, c4 = st.columns(4)
-    c1.metric("Riqueza média", f"{resumo.get('riqueza_media', 0.0):.2f}")
-    c2.metric("Abundância total", f"{resumo.get('abundancia_total', 0.0):,.0f}")
-    c3.metric("Biomassa total", f"{resumo.get('biomassa_total', 0.0):,.2f}")
-    c4.metric("Shannon médio", f"{resumo.get('shannon_medio', 0.0):.2f}")
+    if modo == "Biota":
+        c1.metric("Riqueza média", f"{resumo.get('riqueza_media', 0.0):.2f}")
+        c2.metric("Abundância total", f"{resumo.get('abundancia_total', 0.0):,.0f}")
+        c3.metric("Biomassa total", f"{resumo.get('biomassa_total', 0.0):,.2f}")
+        c4.metric("Shannon médio", f"{resumo.get('shannon_medio', 0.0):.2f}")
+    else:
+        c1.metric("IQA médio", f"{resumo.get('iqa_medio', 0.0):.1f}")
+        c2.metric("Parâmetros não conformes", f"{resumo.get('parametros_nao_conformes', 0.0):,.0f}")
+        c3.metric("Parâmetros com limite", f"{resumo.get('parametros_com_limite', 0.0):,.0f}")
+        c4.metric("Pontos avaliados", f"{resumo.get('pontos', 0.0):,.0f}")
 
     c5, c6, c7, c8 = st.columns(4)
-    c5.metric("Pielou médio", f"{resumo.get('pielou_medio', 0.0):.2f}")
-    c6.metric("Projetos", f"{resumo.get('projetos', 0.0):,.0f}")
-    c7.metric("Campanhas", f"{resumo.get('campanhas', 0.0):,.0f}")
-    c8.metric("Pontos", f"{resumo.get('pontos', 0.0):,.0f}")
+    if modo == "Biota":
+        c5.metric("Pielou médio", f"{resumo.get('pielou_medio', 0.0):.2f}")
+        c6.metric("Projetos", f"{resumo.get('projetos', 0.0):,.0f}")
+        c7.metric("Campanhas", f"{resumo.get('campanhas', 0.0):,.0f}")
+        c8.metric("Pontos", f"{resumo.get('pontos', 0.0):,.0f}")
+    else:
+        c5.metric("Projetos", f"{resumo.get('projetos', 0.0):,.0f}")
+        c6.metric("Campanhas", f"{resumo.get('campanhas', 0.0):,.0f}")
+        c7.metric("Matriz", "Água Superficial")
+        c8.metric("Regra atual", "IQA + NC")
 
     if modo == "Biota" and resumo.get("bmwp_total", 0.0) > 0:
         c9, c10, c11 = st.columns(3)

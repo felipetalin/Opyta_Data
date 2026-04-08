@@ -22,7 +22,11 @@ def get_geo_fisico(conn, projetos: list[str] | None = None, campanhas: list[str]
     campanhas = campanhas or []
 
     params: dict[str, str] = {}
-    conditions = ["latitude IS NOT NULL", "longitude IS NOT NULL"]
+    conditions = [
+        "latitude IS NOT NULL",
+        "longitude IS NOT NULL",
+        "matriz = 'Água Superficial'",
+    ]
 
     if projetos:
         conditions.append(f"projeto IN ({_build_in_clause('projeto', projetos, params)})")
@@ -32,14 +36,23 @@ def get_geo_fisico(conn, projetos: list[str] | None = None, campanhas: list[str]
     query = text(
         f"""
         SELECT
-            projeto,
-            campanha,
-            ponto,
+            nome_projeto AS projeto,
+            nome_campanha AS campanha,
+            nome_ponto AS ponto,
             latitude,
-            longitude
-        FROM public.vw_geo_fisico
+            longitude,
+            matriz,
+            nome_parametro,
+            sinal_limite,
+            valor_medido,
+            unidade_medida,
+            vmp_357_cl2_min,
+            vmp_357_cl2_max,
+            vmp_amonia_dinamico,
+            data_hora_coleta
+        FROM public.fisico_analise_consolidada
         WHERE {' AND '.join(conditions)}
-        ORDER BY projeto, campanha, ponto
+        ORDER BY nome_projeto, nome_campanha, nome_ponto, nome_parametro
         """
     )
     return pd.read_sql(query, conn, params=params)
@@ -90,21 +103,30 @@ def get_geo_biota(
 
 
 def listar_projetos(conn, modo: ModoGeo) -> list[str]:
-    view_name = "vw_geo_fisico" if modo == "Fisico" else "vw_geo_biota"
-    query = text(
-        f"""
-        SELECT DISTINCT projeto
-        FROM public.{view_name}
-        WHERE projeto IS NOT NULL
-        ORDER BY projeto
-        """
-    )
+    if modo == "Fisico":
+        query = text(
+            """
+            SELECT DISTINCT nome_projeto AS projeto
+            FROM public.fisico_analise_consolidada
+            WHERE matriz = 'Água Superficial'
+              AND nome_projeto IS NOT NULL
+            ORDER BY nome_projeto
+            """
+        )
+    else:
+        query = text(
+            """
+            SELECT DISTINCT projeto
+            FROM public.vw_geo_biota
+            WHERE projeto IS NOT NULL
+            ORDER BY projeto
+            """
+        )
     df = pd.read_sql(query, conn)
     return df["projeto"].astype(str).tolist() if not df.empty else []
 
 
 def listar_campanhas(conn, modo: ModoGeo, projetos: list[str] | None = None) -> list[str]:
-    view_name = "vw_geo_fisico" if modo == "Fisico" else "vw_geo_biota"
     projetos = projetos or []
 
     params: dict[str, str] = {}
@@ -112,14 +134,29 @@ def listar_campanhas(conn, modo: ModoGeo, projetos: list[str] | None = None) -> 
     if projetos:
         conditions.append(f"projeto IN ({_build_in_clause('projeto', projetos, params)})")
 
-    query = text(
-        f"""
-        SELECT DISTINCT campanha
-        FROM public.{view_name}
-        WHERE {' AND '.join(conditions)}
-        ORDER BY campanha
-        """
-    )
+    if modo == "Fisico":
+        fisico_conditions = ["nome_campanha IS NOT NULL", "matriz = 'Água Superficial'"]
+        if projetos:
+            fisico_conditions.append(
+                f"nome_projeto IN ({_build_in_clause('projeto_fisico', projetos, params)})"
+            )
+        query = text(
+            f"""
+            SELECT DISTINCT nome_campanha AS campanha
+            FROM public.fisico_analise_consolidada
+            WHERE {' AND '.join(fisico_conditions)}
+            ORDER BY nome_campanha
+            """
+        )
+    else:
+        query = text(
+            f"""
+            SELECT DISTINCT campanha
+            FROM public.vw_geo_biota
+            WHERE {' AND '.join(conditions)}
+            ORDER BY campanha
+            """
+        )
     df = pd.read_sql(query, conn, params=params)
     return df["campanha"].astype(str).tolist() if not df.empty else []
 
