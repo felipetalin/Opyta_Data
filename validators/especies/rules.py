@@ -28,10 +28,16 @@ _EXCEPTIONS_BY_GROUP: dict[str, dict[str, list[str]]] = {
             "Calanoida (nauplius)",
             "Calanoida (copepodito)",
             "Bdelloida",
+            "Bdelloida sp.",
         },
         # Táxons que são nomes únicos válidos (não geram warning)
         "single_word_valid": {
             "Bdelloida",
+        },
+    },
+    "Bentos": {
+        "skip_genus_check": {
+            "Mitilideo sp.",
         },
     },
 }
@@ -228,13 +234,15 @@ def _check_intra_sheet_duplicates(df: pd.DataFrame, report: ValidationReport) ->
 
         if key in keys_seen:
             original_row = keys_seen[key]
+            # Duplicatas intra-planilha são warnings, não bloqueios
+            # O cadastro fará upsert por nome científico, então duplicatas são tratadas
             report.issues.append(
                 ValidationIssue(
                     code="INTRA_SHEET_DUPLICATE",
-                    severity="block",
+                    severity="warning",
                     message=(
                         f"Linha {excel_row}: '{value}' duplica o registro "
-                        f"da linha {original_row}."
+                        f"da linha {original_row}. Será consolidado no cadastro (upsert)."
                     ),
                     row=excel_row,
                     column="Nome_Cientifico",

@@ -22,7 +22,7 @@ Cada grupo pode ter duas tipos de exceção:
 
 ### Zooplâncton
 
-**Táxons especiais sem gênero bem-definido** (adicionados em commit `02967f9`):
+**Táxons especiais sem gênero bem-definido** (adicionados em commits `02967f9`, `3944892`):
 
 ```python
 "Zooplâncton": {
@@ -34,6 +34,7 @@ Cada grupo pode ter duas tipos de exceção:
         "Calanoida (nauplius)",
         "Calanoida (copepodito)",
         "Bdelloida",
+        "Bdelloida sp.",
     },
     "single_word_valid": {
         "Bdelloida",
@@ -42,6 +43,20 @@ Cada grupo pode ter duas tipos de exceção:
 ```
 
 **Motivo:** Esses táxons (cílios, ordens larvais e grupos de rotíferos) não seguem a nomenclatura binomial tradicional e são representantes de níveis taxonômicos acima de espécie. Não possuem gênero bem-definido e devem ser aceitos com `Genero = "N.A."`.
+
+### Bentos
+
+**Táxons especiais** (adicionados em commit `3944892`):
+
+```python
+"Bentos": {
+    "skip_genus_check": {
+        "Mitilideo sp.",
+    },
+}
+```
+
+**Motivo:** Mitilídeos são moluscos bivalves que podem aparecer apenas no nível de família/subfamília (Mytilidae), sem espécie bem-definida. A forma "Mitilideo sp." é válida quando a identificação não chega ao nível de espécie.
 
 **Exemplo de linha válida (sem warnings):**
 | Nome_Cientifico | Grupo_Biologico | Genero |
@@ -143,5 +158,6 @@ Quando um novo grupo gerar warnings ou bloqueios recorrentes:
 
 | Grupo | Exceções skip_genus_check | Exceções single_word_valid | Data Adição |
 |---|---|---|---|
-| Zooplâncton | 7 | 1 | 2026-04-09 |
+| Zooplâncton | 8 | 1 | 2026-04-09 |
+| Bentos | 1 | 0 | 2026-04-09 |
 | *Próximo grupo* | — | — | — |
