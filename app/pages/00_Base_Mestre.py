@@ -5,7 +5,10 @@ from datetime import datetime
 from pathlib import Path
 
 import streamlit as st
+from sqlalchemy import text
 
+from core.app_state import initialize_system_status, mark_stage_completed, render_system_status
+from core.engine import get_engine
 from core.sidebar import render_sidebar
 from core.supabase_client import get_supabase
 from runners.script_runner import run_python_script
@@ -29,15 +32,12 @@ if "logged_in" not in st.session_state or not st.session_state.logged_in:
     st.warning("Faça login para acessar esta página.")
     st.stop()
 
+initialize_system_status()
+
 st.title("00 — Base Mestre")
 
 st.markdown(
-    "📌 **Etapa 1: Base Mestre** | Cadastro de referência\n"
-    "\n"
-    "**Passos:**\n"
-    "1. Escolha o grupo (Avifauna, Ictio, Zooplâncton, etc)  \n"
-    "2. Selecione a ação (Cadastrar ou Atualizar)  \n"
-    "3. Execute o script → ⚠️ Etapa obrigatória antes de importar"
+    "Cadastro de referência com foco em consistência de dados para as próximas etapas do fluxo."
 )
 
 # Raiz do projeto: .../Opyta_Data
@@ -47,6 +47,51 @@ supabase = get_supabase()
 
 RUNTIME_DIR = Path("runtime/base_mestre")
 RUNTIME_DIR.mkdir(parents=True, exist_ok=True)
+
+
+@st.cache_data(show_spinner=False, ttl=90)
+def get_base_mestre_health() -> dict:
+    out = {
+        "especies": 0,
+        "logs_base": 0,
+        "ultima_execucao": "-",
+        "db_ok": False,
+        "erro": None,
+    }
+    engine = None
+    try:
+        engine = get_engine()
+        with engine.begin() as conn:
+            out["especies"] = int(conn.execute(text("SELECT COUNT(*) FROM especies")).scalar() or 0)
+            out["logs_base"] = int(
+                conn.execute(
+                    text(
+                        """
+                        SELECT COUNT(*)
+                        FROM import_logs
+                        WHERE grupo IN ('BASE_ESPECIES', 'BASE_PARAMETROS')
+                        """
+                    )
+                ).scalar()
+                or 0
+            )
+            last_run = conn.execute(
+                text(
+                    """
+                    SELECT MAX(data_execucao)::text
+                    FROM import_logs
+                    WHERE grupo IN ('BASE_ESPECIES', 'BASE_PARAMETROS')
+                    """
+                )
+            ).scalar()
+            out["ultima_execucao"] = str(last_run or "-")
+            out["db_ok"] = True
+    except Exception as exc:
+        out["erro"] = str(exc)
+    finally:
+        if engine is not None:
+            engine.dispose()
+    return out
 
 
 # ----------------------------
@@ -195,6 +240,30 @@ def run_base_action(action_key: str, uploaded_bytes: bytes):
 # ----------------------------
 # UI
 # ----------------------------
+health = get_base_mestre_health()
+
+st.markdown("### Painel rápido")
+m1, m2, m3 = st.columns(3)
+m1.metric("Espécies cadastradas", health["especies"])
+m2.metric("Execuções da etapa", health["logs_base"])
+m3.metric("Última execução", health["ultima_execucao"])
+
+if health["db_ok"]:
+    st.success("Base conectada e métricas da etapa atualizadas.")
+else:
+    st.warning("Não foi possível carregar todas as métricas da Base Mestre.")
+
+st.markdown("### Ações rápidas")
+a1, a2 = st.columns(2)
+if a1.button("Ir para Importação", use_container_width=True, key="base_quick_import"):
+    st.switch_page("pages/01_Importacao.py")
+if a2.button("Voltar ao Início", use_container_width=True, key="base_quick_home"):
+    st.switch_page("main.py")
+
+render_system_status()
+
+st.markdown("### Operações de cadastro")
+
 col1, col2 = st.columns(2)
 
 with col1:
@@ -204,6 +273,8 @@ with col1:
     if st.button("Rodar cadastro de espécies", disabled=(up is None)):
         res = run_base_action("BASE_ESPECIES", up.getvalue())
         parsed = parse_species_stdout(res.stdout or "")
+        if res.status == "success":
+            mark_stage_completed("base_mestre_status")
         render_run_summary("Cadastro de Espécies", res.status, res.stdout or "", parsed)
 
 with col2:
@@ -213,4 +284,6 @@ with col2:
     if st.button("Rodar cadastro de parâmetros", disabled=(up is None)):
         res = run_base_action("BASE_PARAMETROS", up.getvalue())
         parsed = parse_parametros_stdout(res.stdout or "")
+        if res.status == "success":
+            mark_stage_completed("base_mestre_status")
         render_run_summary("Cadastro de Parâmetros", res.status, res.stdout or "", parsed)
