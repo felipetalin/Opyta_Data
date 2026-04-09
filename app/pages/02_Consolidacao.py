@@ -399,18 +399,24 @@ if rollback_result:
 if st.button("Rodar Consolidacao (Modo Seguro)"):
     script_abs = PROJECT_ROOT / spec.script
     try:
+        simulation_ok = True
         if simulate_first:
             simulation = run_safe_simulation()
             st.session_state["consolidacao_simulation"] = simulation
             write_log(spec.key, "simulacao", simulation.get("message") or "")
+            simulation_ok = bool(simulation.get("ok"))
 
-            if not simulation.get("ok"):
+            if not simulation_ok:
                 st.error(f"Simulacao falhou: {simulation.get('error') or 'erro desconhecido'}")
             else:
                 st.success("Simulacao concluida sem gravacao.")
 
         real_released = confirm_real and confirm_text.strip().upper() == "CONSOLIDAR"
-        if not real_released:
+        if not simulation_ok:
+            st.warning(
+                "Consolidacao real bloqueada: a simulacao falhou. Corrija os alertas e tente novamente."
+            )
+        elif not real_released:
             st.warning(
                 "Consolidacao real bloqueada no modo seguro. Revise a simulacao e confirme explicitamente para gravar."
             )
@@ -561,3 +567,4 @@ if consolidacao_result:
     elif action == "cons_reset":
         st.session_state["consolidacao_result"] = None
         st.rerun()
+
