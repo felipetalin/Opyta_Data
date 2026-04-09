@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import streamlit as st
 
+
 # ------------------------------------------------
 # Verificação de login (sempre primeiro)
 # ------------------------------------------------
@@ -29,11 +30,20 @@ from pathlib import Path
 import pandas as pd
 from sqlalchemy import text
 
+from core.app_state import initialize_system_status, mark_stage_completed, render_system_status
+from core.ui.layout import (
+    extract_alert_lines,
+    inject_saas_styles,
+    render_action_buttons,
+    render_alert_block,
+    render_executive_summary,
+    render_stepper,
+    render_technical_log,
+)
 from core.engine import get_engine
 from runners.registry import ACTIONS, GROUP_TO_ACTION_KEY
 from runners.script_runner import run_python_script
 from validators.registry import VALIDATORS
-from core.app_state import initialize_system_status, mark_stage_completed
 
 
 # ------------------------------------------------
@@ -45,6 +55,7 @@ if "logged_in" not in st.session_state or not st.session_state.logged_in:
     st.stop()
 
 initialize_system_status()
+inject_saas_styles()
 
 
 # ------------------------------------------------
@@ -54,12 +65,7 @@ initialize_system_status()
 st.title("01 — Importação")
 
 st.markdown(
-    "📌 **Etapa 2: Importação** | Entrada de dados\n"
-    "\n"
-    "**Passos:**\n"
-    "1. Selecione grupo e faça upload do arquivo  \n"
-    "2. Validação automática de formato e dados  \n"
-    "3. Clique em Migrar → ✅ Próxima etapa: Consolidação"
+    "Fluxo guiado com validacao, migracao monitorada e resultado executivo para tomada de decisao."
 )
 
 # Raiz do projeto: .../Opyta_Data
@@ -67,6 +73,131 @@ PROJECT_ROOT = Path(__file__).resolve().parents[2]
 
 RUNTIME_ROOT = PROJECT_ROOT / "runtime" / "importacao"
 RUNTIME_ROOT.mkdir(parents=True, exist_ok=True)
+
+
+@st.cache_data(show_spinner=False, ttl=90)
+def get_importacao_health() -> dict:
+    out = {
+        "logs_importacao": 0,
+        "projetos_importados": 0,
+        "ultima_execucao": "-",
+        "db_ok": False,
+        "erro": None,
+    }
+
+    engine = None
+    try:
+        engine = get_engine()
+        with engine.begin() as conn:
+            out["logs_importacao"] = int(
+                conn.execute(
+                    text(
+                        """
+                        SELECT COUNT(*)
+                        FROM import_logs
+                        WHERE etapa = 'IMPORTACAO'
+                        """
+                    )
+                ).scalar()
+                or 0
+            )
+            out["projetos_importados"] = int(
+                conn.execute(
+                    text(
+                        """
+                        SELECT COUNT(DISTINCT id_projeto)
+                        FROM pontos_coleta
+                        """
+                    )
+                ).scalar()
+                or 0
+            )
+            out["ultima_execucao"] = str(
+                conn.execute(
+                    text(
+                        """
+                        SELECT MAX(data_execucao)::text
+                        FROM import_logs
+                        WHERE etapa = 'IMPORTACAO'
+                        """
+                    )
+                ).scalar()
+                or "-"
+            )
+            out["db_ok"] = True
+    except Exception as exc:
+        out["erro"] = str(exc)
+    finally:
+        if engine is not None:
+            engine.dispose()
+
+    return out
+
+
+health = get_importacao_health()
+
+st.markdown("### Visão operacional")
+render_executive_summary(
+    "Resumo da etapa",
+    [
+        {
+            "label": "Execuções da etapa",
+            "value": health["logs_importacao"],
+            "hint": "Histórico registrado no banco",
+            "status": "info",
+        },
+        {
+            "label": "Projetos com dados",
+            "value": health["projetos_importados"],
+            "hint": "Projetos já carregados",
+            "status": "ok" if health["db_ok"] else "warn",
+        },
+        {
+            "label": "Última importação",
+            "value": health["ultima_execucao"],
+            "hint": "Último processamento identificado",
+            "status": "info",
+        },
+    ],
+)
+
+top_col1, top_col2 = st.columns([1.35, 1])
+
+with top_col1:
+    with st.container(border=True):
+        st.markdown("#### Central de execução")
+        if health["db_ok"]:
+            st.success("Banco conectado. A etapa está pronta para validar e migrar arquivos.")
+        else:
+            st.warning("Não foi possível carregar todas as métricas da Importação.")
+            if health.get("erro"):
+                with st.expander("Detalhes técnicos do painel"):
+                    st.code(str(health["erro"]))
+
+        st.caption("Fluxo recomendado: selecionar grupo, validar o arquivo limpo e então executar a migração.")
+
+        action = render_action_buttons(
+            [
+                {"label": "Atualizar painel", "key": "import_refresh_health", "primary": True},
+                {"label": "Ir para Base Mestre", "key": "import_quick_base"},
+                {"label": "Ir para Consolidação", "key": "import_quick_consolidacao"},
+            ]
+        )
+
+        if action == "import_refresh_health":
+            get_importacao_health.clear()
+            st.rerun()
+        elif action == "import_quick_base":
+            st.switch_page("pages/00_Base_Mestre.py")
+        elif action == "import_quick_consolidacao":
+            st.switch_page("pages/02_Consolidacao.py")
+
+with top_col2:
+    render_system_status()
+    if st.button("Voltar ao Início", use_container_width=True, key="import_quick_home"):
+        st.switch_page("main.py")
+
+st.markdown("### Operação de importação")
 
 # ============================================================
 # Normalização / Correção segura (automática)
@@ -86,6 +217,42 @@ def normalize_text(x):
     s = re.sub(_HYPHENS, "-", s)
     s = re.sub(r"\s*-\s*", "-", s)
     return s
+
+
+def normalize_group_key(value: str | None) -> str:
+    if not value:
+        return ""
+    return normalize_text(value).lower()
+
+
+def get_group_result_mapping() -> tuple[dict[str, str], dict[str, str]]:
+    """Fonte única de mapeamento grupo -> tabela e grupo_banco."""
+    tabela_map = {
+        "ictiofauna": "resultados_ictiofauna",
+        "bentos": "resultados_zoobentos",
+        "zoobentos": "resultados_zoobentos",
+        "fitoplâncton": "resultados_fitoplancton",
+        "fitoplancton": "resultados_fitoplancton",
+        "zooplâncton": "resultados_zooplancton",
+        "zooplancton": "resultados_zooplancton",
+        "avifauna": "resultados_avifauna",
+        "herpetofauna": "resultados_herpetofauna",
+        "mastofauna": "resultados_mastofauna",
+    }
+
+    grupo_banco_map = {
+        "ictiofauna": "Ictiofauna",
+        "bentos": "Zoobentos",
+        "zoobentos": "Zoobentos",
+        "fitoplâncton": "Fitoplancton",
+        "fitoplancton": "Fitoplancton",
+        "zooplâncton": "Zooplancton",
+        "zooplancton": "Zooplancton",
+        "avifauna": "Avifauna",
+        "herpetofauna": "Herpetofauna",
+        "mastofauna": "Mastofauna",
+    }
+    return tabela_map, grupo_banco_map
 
 
 def normalize_df(df: pd.DataFrame) -> tuple[pd.DataFrame, int]:
@@ -160,13 +327,26 @@ def get_runtime_env() -> dict[str, str]:
 # Resumo 2.1 — pós-migração
 # ============================================================
 
-def gerar_resumo_pos_migracao(grupo: str, excel_path: Path):
+def gerar_resumo_pos_migracao(grupo: str, excel_path: Path) -> dict:
     """
     Resumo robusto:
     - Projeto: via Codigo_Opyta do Excel
     - Campanhas / pontos: mostra o escopo do Excel
     - Esforços / resultados: conta no banco por projeto + grupo
     """
+    output = {
+        "projeto": "-",
+        "campanhas_excel": [],
+        "pontos_excel": [],
+        "campanhas_banco": [],
+        "pontos_banco": [],
+        "esforcos_banco": 0,
+        "resultados_banco": 0,
+        "especies_banco": 0,
+        "status": "ok",
+        "alertas": [],
+    }
+
     xls = pd.ExcelFile(excel_path)
 
     df_capa = pd.read_excel(xls, "Capa_Projeto")
@@ -174,15 +354,18 @@ def gerar_resumo_pos_migracao(grupo: str, excel_path: Path):
 
     codigo_raw = str(df_capa.iloc[0].get("Codigo_Opyta", "") or "")
     codigo = codigo_raw.replace("\u00A0", " ").strip()
+    output["projeto"] = codigo or "-"
 
     campanhas_excel = sorted([
         str(x).replace("\u00A0", " ").strip()
         for x in df_pontos["Campanha"].dropna().unique().tolist()
     ])
+    output["campanhas_excel"] = campanhas_excel
     pontos_excel = sorted([
         str(x).replace("\u00A0", " ").strip()
         for x in df_pontos["Ponto"].dropna().unique().tolist()
     ])
+    output["pontos_excel"] = pontos_excel
 
     engine = None
 
@@ -203,8 +386,11 @@ def gerar_resumo_pos_migracao(grupo: str, excel_path: Path):
             ).scalar()
 
             if not id_projeto:
-                st.warning(f"Projeto não encontrado no banco para Código_Opyta = {codigo}")
-                return
+                output["status"] = "warning"
+                output["alertas"].append(
+                    f"Projeto nao encontrado no banco para Codigo_Opyta = {codigo}."
+                )
+                return output
 
             rows_camp = conn.execute(
                 text(
@@ -219,6 +405,7 @@ def gerar_resumo_pos_migracao(grupo: str, excel_path: Path):
                 {"idp": id_projeto},
             ).fetchall()
             campanhas_banco = [r[0] for r in rows_camp]
+            output["campanhas_banco"] = campanhas_banco
 
             rows_pontos = conn.execute(
                 text(
@@ -232,20 +419,7 @@ def gerar_resumo_pos_migracao(grupo: str, excel_path: Path):
                 {"idp": id_projeto},
             ).fetchall()
             pontos_banco = [r[0] for r in rows_pontos]
-
-            c1, c2, c3, c4 = st.columns(4)
-            c1.metric("Projeto", codigo if codigo else "-")
-            c2.metric("Campanhas (Excel)", len(campanhas_excel))
-            c3.metric("Pontos (Excel)", len(pontos_excel))
-            c4.metric("Grupo", grupo)
-
-            with st.expander("Ver escopo do Excel"):
-                st.write("**Campanhas (Excel):**", campanhas_excel)
-                st.write("**Pontos (Excel):**", pontos_excel)
-
-            with st.expander("Ver escopo encontrado no banco"):
-                st.write("**Campanhas (Banco):**", campanhas_banco)
-                st.write("**Pontos (Banco):**", pontos_banco)
+            output["pontos_banco"] = pontos_banco
 
             if grupo == "Meio Físico":
                 total_res = conn.execute(
@@ -259,32 +433,19 @@ def gerar_resumo_pos_migracao(grupo: str, excel_path: Path):
                     ),
                     {"idp": id_projeto},
                 ).scalar()
+                output["resultados_banco"] = int(total_res or 0)
+                return output
 
-                a, b = st.columns(2)
-                a.metric("Status", "OK")
-                b.metric("Resultados (Banco)", int(total_res or 0))
-                return
+            tabela_map, grupo_banco_map = get_group_result_mapping()
 
-            tabela_map = {
-                "Ictiofauna": "resultados_ictiofauna",
-                "Bentos": "resultados_zoobentos",
-                "Fitoplâncton": "resultados_fitoplancton",
-                "Zooplâncton": "resultados_zooplancton",
-            }
-
-            grupo_banco_map = {
-                "Ictiofauna": "Ictiofauna",
-                "Bentos": "Zoobentos",
-                "Fitoplâncton": "Fitoplancton",
-                "Zooplâncton": "Zooplancton",
-            }
-
-            tabela = tabela_map.get(grupo)
-            grupo_banco = grupo_banco_map.get(grupo)
+            grupo_norm = normalize_group_key(grupo)
+            tabela = tabela_map.get(grupo_norm)
+            grupo_banco = grupo_banco_map.get(grupo_norm)
 
             if not tabela or not grupo_banco:
-                st.warning(f"Sem mapeamento de banco para o grupo '{grupo}'.")
-                return
+                output["status"] = "warning"
+                output["alertas"].append(f"Sem mapeamento de banco para o grupo '{grupo}'.")
+                return output
 
             total_esforcos = conn.execute(
                 text(
@@ -298,6 +459,7 @@ def gerar_resumo_pos_migracao(grupo: str, excel_path: Path):
                 ),
                 {"idp": id_projeto, "g": grupo_banco},
             ).scalar()
+            output["esforcos_banco"] = int(total_esforcos or 0)
 
             total_res = conn.execute(
                 text(
@@ -312,23 +474,75 @@ def gerar_resumo_pos_migracao(grupo: str, excel_path: Path):
                 ),
                 {"idp": id_projeto, "g": grupo_banco},
             ).scalar()
+            output["resultados_banco"] = int(total_res or 0)
 
-            a, b, c = st.columns(3)
-            a.metric("Status", "OK")
-            b.metric("Esforços (Banco)", int(total_esforcos or 0))
-            c.metric("Resultados (Banco)", int(total_res or 0))
+            total_especies = conn.execute(
+                text(
+                    f"""
+                    SELECT COUNT(DISTINCT r.id_especie)
+                    FROM {tabela} r
+                    JOIN esforcos_amostragem e ON e.id_esforco = r.id_esforco
+                    JOIN pontos_coleta pc ON pc.id_ponto_coleta = e.id_ponto_coleta
+                    WHERE pc.id_projeto = :idp
+                      AND e.grupo_biologico = :g
+                    """
+                ),
+                {"idp": id_projeto, "g": grupo_banco},
+            ).scalar()
+            output["especies_banco"] = int(total_especies or 0)
 
     finally:
         if engine is not None:
             engine.dispose()
+
+    return output
+
+
+def parse_inserted_records(stdout: str) -> int:
+    if not stdout:
+        return 0
+    matches = re.findall(r"(\d+)\s+registros", stdout, re.IGNORECASE)
+    if not matches:
+        return 0
+    return max(int(v) for v in matches)
+
+
+def render_scope_list(title: str, items: list[str], ok: bool = True) -> None:
+    icon = "OK" if ok else "!"
+    if not items:
+        st.write(f"{icon} {title}: sem itens")
+        return
+    st.write(f"{icon} {title} ({len(items)})")
+    for item in items:
+        st.write(f"- {item}")
 
 
 # ============================================================
 # UI — seleção / upload
 # ============================================================
 
+if "import_result" not in st.session_state:
+    st.session_state["import_result"] = None
+
 grupo = st.selectbox("Grupo", list(GROUP_TO_ACTION_KEY.keys()))
 uploaded = st.file_uploader("Upload do Excel", type=["xlsx"])
+
+
+def _uploaded_signature(file_obj) -> str | None:
+    if file_obj is None:
+        return None
+    return f"{file_obj.name}|{file_obj.size}|{grupo}"
+
+
+current_upload_signature = _uploaded_signature(uploaded)
+previous_upload_signature = st.session_state.get("import_upload_signature")
+
+if current_upload_signature != previous_upload_signature:
+    st.session_state["validated_ok"] = False
+    st.session_state["excel_para_migrar"] = None
+    st.session_state["clean_changes"] = 0
+    st.session_state["import_result"] = None
+    st.session_state["import_upload_signature"] = current_upload_signature
 
 action_key = GROUP_TO_ACTION_KEY[grupo]
 spec = ACTIONS[action_key]
@@ -341,12 +555,31 @@ if uploaded is not None:
     excel_path = runtime_dir / spec.expected_excel_name
     excel_path.write_bytes(uploaded.getbuffer())
 
+validated_ok = bool(st.session_state.get("validated_ok", False))
+
+if uploaded is None:
+    step_index = 0
+elif uploaded is not None and not validated_ok:
+    step_index = 1
+elif validated_ok and st.session_state.get("import_result") is None:
+    step_index = 2
+else:
+    step_index = 4 if st.session_state["import_result"]["status"] == "success" else 3
+
+has_step_error = bool(
+    st.session_state.get("import_result")
+    and st.session_state["import_result"].get("status") != "success"
+)
+
+st.markdown("### Etapas")
+render_stepper(["Upload", "Validacao", "Migracao", "Resultado"], current_step=step_index, has_error=has_step_error)
+
 
 # ============================================================
 # Validação (1 etapa) = corrige + valida estrutura
 # ============================================================
 
-st.subheader("Validação (1 etapa)")
+st.subheader("Validacao")
 
 if "validated_ok" not in st.session_state:
     st.session_state["validated_ok"] = False
@@ -358,36 +591,41 @@ if "clean_changes" not in st.session_state:
 btn_validate = st.button("Validar (corrige automaticamente)", disabled=(excel_path is None))
 
 if btn_validate:
-    cleaned_path = runtime_dir / f"clean_{excel_path.name}"
-    total_changes = write_clean_excel(excel_path, cleaned_path)
+    try:
+        with st.spinner("Validando arquivo..."):
+            cleaned_path = runtime_dir / f"clean_{excel_path.name}"
+            total_changes = write_clean_excel(excel_path, cleaned_path)
 
-    st.session_state["clean_changes"] = int(total_changes)
-    st.session_state["excel_para_migrar"] = str(cleaned_path)
+            st.session_state["clean_changes"] = int(total_changes)
+            st.session_state["excel_para_migrar"] = str(cleaned_path)
 
-    st.success("Correção automática concluída ✅")
-    st.metric("Correções automáticas aplicadas", st.session_state["clean_changes"])
+            xls_clean = pd.ExcelFile(cleaned_path)
+            ok, errors = VALIDATORS[grupo].validate(xls_clean)
 
-    xls_clean = pd.ExcelFile(cleaned_path)
-    ok, errors = VALIDATORS[grupo].validate(xls_clean)
+        st.success("Validação concluída com sucesso!")
+        st.metric("Correções automáticas aplicadas", st.session_state["clean_changes"])
 
-    if ok:
-        mark_stage_completed("importacao_status")
-        st.success("Validação estrutural OK ✅")
-        st.session_state["validated_ok"] = True
-        st.info("Pronto para migrar: a migração usará o Excel limpo automaticamente.")
-    else:
+        if ok:
+            mark_stage_completed("importacao_status")
+            st.success("Arquivo validado e pronto para migrar.")
+            st.session_state["validated_ok"] = True
+            st.info("Pronto para migrar: a migração usará o arquivo corrigido automaticamente.")
+        else:
+            st.session_state["validated_ok"] = False
+            st.error("A validação encontrou pontos que precisam de ajuste.")
+            for e in errors:
+                st.write("-", e)
+            st.warning("Corrija os itens acima e valide novamente.")
+    except Exception as exc:
         st.session_state["validated_ok"] = False
-        st.error("Validação estrutural falhou ❌")
-        for e in errors:
-            st.write("-", e)
-        st.warning("Corrija os itens acima e valide novamente.")
+        st.error(f"Erro ao validar arquivo: {exc}")
 
 
 # ============================================================
 # Migração
 # ============================================================
 
-st.subheader("Migração")
+st.subheader("Migracao")
 
 excel_para_migrar = None
 if st.session_state.get("excel_para_migrar"):
@@ -406,34 +644,124 @@ if st.button("Migrar", disabled=not can_migrate):
         st.error(f"Falha ao preparar ambiente da migração: {e}")
         st.stop()
 
-    res = run_python_script(
-        script_path=str(script_abs),
-        args=[str(excel_para_migrar.resolve())],
-        cwd=runtime_dir,
-        extra_env=extra_env,
+    try:
+        progress_box = st.empty()
+        status_box = st.status("Executando migracao...", expanded=True)
+        progress = progress_box.progress(8, text="Preparando migracao")
+
+        line_count = [0]
+
+        def _on_output_line(line: str):
+            line_count[0] += 1
+            current = min(90, 10 + line_count[0] * 2)
+            progress.progress(current, text="Migrando registros no banco")
+            if line.strip():
+                status_box.write(line.strip())
+
+        with st.spinner("Migrando dados..."):
+            res = run_python_script(
+                script_path=str(script_abs),
+                args=[str(excel_para_migrar.resolve())],
+                cwd=runtime_dir,
+                extra_env=extra_env,
+                on_output_line=_on_output_line,
+            )
+
+        progress.progress(100 if res.status == "success" else 92, text="Concluido" if res.status == "success" else "Finalizado com erro")
+        status_box.update(
+            label="Migracao concluida com sucesso" if res.status == "success" else "Migracao finalizada com erro",
+            state="complete" if res.status == "success" else "error",
+        )
+
+        ok = getattr(res, "status", "") == "success"
+
+        if ok:
+            mark_stage_completed("importacao_status")
+            st.success("Migração concluída com sucesso!")
+        else:
+            st.error("A migração terminou com erro.")
+
+        stdout = getattr(res, "stdout", "") or ""
+        stderr = getattr(res, "stderr", "") or ""
+
+        resumo = {"status": "warning", "alertas": ["Resumo indisponivel"], "projeto": "-", "campanhas_excel": [], "pontos_excel": [], "campanhas_banco": [], "pontos_banco": [], "esforcos_banco": 0, "resultados_banco": 0, "especies_banco": 0}
+        try:
+            resumo = gerar_resumo_pos_migracao(grupo, excel_para_migrar.resolve())
+        except Exception as e:
+            resumo["alertas"] = [f"Falha ao gerar resumo pos-migracao: {e}"]
+
+        st.session_state["import_result"] = {
+            "status": res.status,
+            "stdout": stdout,
+            "stderr": stderr,
+            "resumo": resumo,
+            "grupo": grupo,
+            "registros_inseridos": parse_inserted_records(stdout),
+        }
+    except Exception as exc:
+        st.error(f"Erro ao migrar dados: {exc}")
+
+
+import_result = st.session_state.get("import_result")
+if import_result:
+    st.markdown("---")
+    st.subheader("Resultado")
+
+    resumo = import_result["resumo"]
+    erros = 0 if import_result["status"] == "success" else 1
+    registros = import_result.get("registros_inseridos") or resumo.get("resultados_banco") or 0
+
+    render_executive_summary(
+        "Resumo executivo",
+        [
+            {"label": "Projeto", "value": resumo.get("projeto", "-"), "hint": "Codigo Opyta", "status": "info"},
+            {"label": "Campanhas", "value": len(resumo.get("campanhas_excel", [])), "hint": "Escopo do arquivo", "status": "info"},
+            {"label": "Pontos processados", "value": len(resumo.get("pontos_excel", [])), "hint": "Escopo do arquivo", "status": "info"},
+            {"label": "Registros inseridos", "value": registros, "hint": "Resultado da migracao", "status": "ok" if import_result["status"] == "success" else "warn"},
+            {"label": "Erros", "value": erros, "hint": "Execucao atual", "status": "error" if erros else "ok"},
+        ],
     )
 
-    ok = getattr(res, "status", "") == "success"
+    st.markdown("### Escopo processado")
+    c1, c2 = st.columns(2)
+    with c1:
+        render_scope_list("Campanhas (Excel)", resumo.get("campanhas_excel", []), ok=True)
+        render_scope_list("Pontos (Excel)", resumo.get("pontos_excel", []), ok=True)
+    with c2:
+        render_scope_list("Campanhas (Banco)", resumo.get("campanhas_banco", []), ok=True)
+        render_scope_list("Pontos (Banco)", resumo.get("pontos_banco", []), ok=True)
 
-    if ok:
-        mark_stage_completed("importacao_status")
-        st.success("Migração concluída ✅")
-    else:
-        st.error("Migração falhou ❌")
+    st.markdown("### Alertas")
+    alerts = []
+    alerts.extend(resumo.get("alertas", []))
+    alerts.extend(extract_alert_lines(import_result["stdout"], import_result["stderr"]))
+    render_alert_block(alerts, title="Inconsistencias e avisos")
 
-    stdout = getattr(res, "stdout", "") or ""
-    stderr = getattr(res, "stderr", "") or ""
+    st.markdown("### Log tecnico")
+    render_technical_log(import_result["stdout"], import_result["stderr"], title="Ver log tecnico")
 
-    if stdout.strip():
-        st.code(stdout, language="text")
-    if stderr.strip():
-        st.code(stderr, language="text")
+    st.markdown("### Acoes")
+    action = render_action_buttons(
+        [
+            {"label": "Ver dados importados", "key": "import_view_data", "primary": True},
+            {"label": "Ir para consolidacao", "key": "import_go_consolidacao"},
+            {"label": "Nova importacao", "key": "import_reset"},
+        ]
+    )
 
-    st.markdown("---")
-    st.subheader("Resumo pós-migração (2.1)")
-    try:
-        gerar_resumo_pos_migracao(grupo, excel_para_migrar.resolve())
-    except Exception as e:
-        st.warning(f"Falha ao gerar resumo pós-migração: {e}")
-
-
+    if action == "import_view_data":
+        try:
+            st.switch_page("app/pages/03_Analises.py")
+        except Exception:
+            st.info("Nao foi possivel abrir a pagina de analises automaticamente.")
+    elif action == "import_go_consolidacao":
+        try:
+            st.switch_page("app/pages/02_Consolidacao.py")
+        except Exception:
+            st.info("Nao foi possivel abrir a pagina de consolidacao automaticamente.")
+    elif action == "import_reset":
+        st.session_state["validated_ok"] = False
+        st.session_state["excel_para_migrar"] = None
+        st.session_state["clean_changes"] = 0
+        st.session_state["import_result"] = None
+        st.rerun()
