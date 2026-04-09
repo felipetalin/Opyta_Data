@@ -31,3 +31,22 @@ PRIORIDADE RECOMENDADA
 2. Criar um painel de status operacional do pipeline.
 3. Criar uma camada de auditoria e qualidade de dados.
 4. Aprofundar inteligencia analitica em Geoambiental e Analises.
+
+CONEXAO ESTRATEGICA: MODELOS OFICIAIS DE PLANILHA
+
+Disponibilizar no app modelos oficiais de planilha de cadastro e importacao e uma alavanca direta para cultura de qualidade de dados.
+Esse movimento reduz erro na origem, padroniza comportamento operacional e prepara o time para evolucao futura de digitacao direta no sistema.
+
+Diretriz de produto
+
+1. Publicar modelos oficiais por fluxo (Cadastro de Especies e Importacao por Grupo).
+2. Embutir no proprio modelo as recomendacoes de preenchimento e os exemplos validos.
+3. Incorporar excecoes homologadas por grupo biologico no material de apoio e no validador.
+4. Versionar modelos (v1.0, v1.1, etc.) com historico de mudancas visivel no app.
+5. Garantir alinhamento 1:1 entre regra do validador e instrucao do modelo para evitar ambiguidade.
+
+Sequencia recomendada
+
+1. Primeiro: distribuir modelo oficial e treinar cultura de cuidado com dados.
+2. Depois: medir queda de erros de validacao e retrabalho por ciclo de importacao.
+3. Em seguida: evoluir para digitacao direta no sistema com menor risco de adesao.
