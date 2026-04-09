@@ -33,6 +33,7 @@ from core.engine import get_engine
 from runners.registry import ACTIONS, GROUP_TO_ACTION_KEY
 from runners.script_runner import run_python_script
 from validators.registry import VALIDATORS
+from core.app_state import initialize_system_status, mark_stage_completed
 
 
 # ------------------------------------------------
@@ -42,6 +43,8 @@ from validators.registry import VALIDATORS
 if "logged_in" not in st.session_state or not st.session_state.logged_in:
     st.warning("Faça login para acessar esta página.")
     st.stop()
+
+initialize_system_status()
 
 
 # ------------------------------------------------
@@ -368,6 +371,7 @@ if btn_validate:
     ok, errors = VALIDATORS[grupo].validate(xls_clean)
 
     if ok:
+        mark_stage_completed("importacao_status")
         st.success("Validação estrutural OK ✅")
         st.session_state["validated_ok"] = True
         st.info("Pronto para migrar: a migração usará o Excel limpo automaticamente.")
@@ -412,6 +416,7 @@ if st.button("Migrar", disabled=not can_migrate):
     ok = getattr(res, "status", "") == "success"
 
     if ok:
+        mark_stage_completed("importacao_status")
         st.success("Migração concluída ✅")
     else:
         st.error("Migração falhou ❌")
@@ -430,3 +435,5 @@ if st.button("Migrar", disabled=not can_migrate):
         gerar_resumo_pos_migracao(grupo, excel_para_migrar.resolve())
     except Exception as e:
         st.warning(f"Falha ao gerar resumo pós-migração: {e}")
+
+
