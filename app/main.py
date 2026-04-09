@@ -287,6 +287,7 @@ def require_login():
             if stored_record and _verify_password(pwd_input, stored_record):
                 st.session_state.logged_in = True
                 st.session_state.logged_user = user_key
+                st.session_state.last_activity_utc = datetime.now(timezone.utc).isoformat()
                 _reset_login_attempts()
                 st.rerun()
             else:

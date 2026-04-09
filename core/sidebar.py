@@ -1,6 +1,59 @@
+from __future__ import annotations
+
+import os
+from datetime import datetime, timedelta, timezone
+
 import streamlit as st
 
+
+def _get_session_timeout_minutes() -> int:
+    raw = os.getenv("SESSION_TIMEOUT_MINUTES", "45").strip()
+    try:
+        value = int(raw)
+    except Exception:
+        value = 45
+    return max(5, min(value, 240))
+
+
+def _is_session_expired() -> bool:
+    if not st.session_state.get("logged_in"):
+        return False
+
+    timeout_minutes = _get_session_timeout_minutes()
+    now = datetime.now(timezone.utc)
+    last_activity_iso = st.session_state.get("last_activity_utc")
+
+    if not last_activity_iso:
+        st.session_state.last_activity_utc = now.isoformat()
+        return False
+
+    try:
+        last_activity = datetime.fromisoformat(str(last_activity_iso))
+    except Exception:
+        st.session_state.last_activity_utc = now.isoformat()
+        return False
+
+    return now - last_activity > timedelta(minutes=timeout_minutes)
+
+
+def _touch_activity() -> None:
+    if st.session_state.get("logged_in"):
+        st.session_state.last_activity_utc = datetime.now(timezone.utc).isoformat()
+
+
+def _clear_login_state() -> None:
+    st.session_state.logged_in = False
+    st.session_state.logged_user = None
+    st.session_state.last_activity_utc = None
+
 def render_sidebar():
+    if _is_session_expired():
+        _clear_login_state()
+        st.warning("Sessao expirada por inatividade. Faça login novamente.")
+        st.switch_page("main.py")
+
+    _touch_activity()
+
     with st.sidebar:
         st.image("app/assets/logo.png", use_container_width=True)
 
@@ -45,6 +98,5 @@ def render_sidebar():
         st.divider()
 
         if st.button("Sair", use_container_width=True):
-            st.session_state.logged_in = False
-            st.session_state.logged_user = None
+            _clear_login_state()
             st.rerun()
