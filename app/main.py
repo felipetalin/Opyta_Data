@@ -1,5 +1,12 @@
+import base64
+import hashlib
+import hmac
+import json
+import os
 import sys
+import time
 from pathlib import Path
+from datetime import datetime, timedelta, timezone
 
 ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
@@ -21,6 +28,12 @@ st.set_page_config(
 
 if "logged_in" not in st.session_state:
     st.session_state.logged_in = False
+
+if "failed_login_attempts" not in st.session_state:
+    st.session_state.failed_login_attempts = 0
+
+if "login_lock_until" not in st.session_state:
+    st.session_state.login_lock_until = None
 
 st.markdown("""
 <style>
@@ -152,6 +165,93 @@ else:
 
 
 def require_login():
+    def _parse_pbkdf2_record(record: str):
+        # Format: pbkdf2_sha256$<iterations>$<salt_b64>$<hash_b64>
+        try:
+            scheme, iterations, salt_b64, hash_b64 = record.split("$", 3)
+            if scheme != "pbkdf2_sha256":
+                return None
+            return int(iterations), salt_b64, hash_b64
+        except Exception:
+            return None
+
+    def _verify_password(password: str, stored_record: str) -> bool:
+        parsed = _parse_pbkdf2_record(stored_record)
+        if not parsed:
+            return False
+
+        iterations, salt_b64, expected_hash_b64 = parsed
+        try:
+            salt = base64.b64decode(salt_b64.encode("utf-8"))
+        except Exception:
+            return False
+
+        derived = hashlib.pbkdf2_hmac(
+            "sha256",
+            password.encode("utf-8"),
+            salt,
+            iterations,
+        )
+        derived_b64 = base64.b64encode(derived).decode("utf-8")
+        return hmac.compare_digest(derived_b64, expected_hash_b64)
+
+    def _load_auth_users() -> dict[str, str]:
+        users: dict[str, str] = {}
+
+        # Prioridade 1: Streamlit secrets (AUTH_USERS_JSON)
+        try:
+            auth_json = st.secrets.get("AUTH_USERS_JSON")
+            if auth_json:
+                loaded = json.loads(str(auth_json))
+                if isinstance(loaded, dict):
+                    for user, record in loaded.items():
+                        users[str(user).strip().lower()] = str(record).strip()
+        except Exception:
+            pass
+
+        # Prioridade 2: Variável de ambiente
+        if not users:
+            try:
+                env_auth = os.getenv("AUTH_USERS_JSON", "").strip()
+                if env_auth:
+                    loaded = json.loads(env_auth)
+                    if isinstance(loaded, dict):
+                        for user, record in loaded.items():
+                            users[str(user).strip().lower()] = str(record).strip()
+            except Exception:
+                pass
+
+        return users
+
+    def _is_locked() -> tuple[bool, str]:
+        lock_until = st.session_state.get("login_lock_until")
+        if not lock_until:
+            return False, ""
+
+        now = datetime.now(timezone.utc)
+        if now >= lock_until:
+            st.session_state.login_lock_until = None
+            st.session_state.failed_login_attempts = 0
+            return False, ""
+
+        remaining = lock_until - now
+        minutes = int(remaining.total_seconds() // 60)
+        seconds = int(remaining.total_seconds() % 60)
+        return True, f"Muitas tentativas inválidas. Tente novamente em {minutes:02d}:{seconds:02d}."
+
+    def _register_failed_attempt():
+        attempts = int(st.session_state.get("failed_login_attempts", 0)) + 1
+        st.session_state.failed_login_attempts = attempts
+
+        max_attempts = 5
+        lock_minutes = 15
+        if attempts >= max_attempts:
+            st.session_state.login_lock_until = datetime.now(timezone.utc) + timedelta(minutes=lock_minutes)
+
+    def _reset_login_attempts():
+        st.session_state.failed_login_attempts = 0
+        st.session_state.login_lock_until = None
+
     if st.session_state.logged_in:
         return True
 
@@ -162,24 +262,39 @@ def require_login():
         st.markdown("### Acesso à plataforma")
         st.write("Entre com seu usuário e senha para continuar.")
 
+        locked, lock_msg = _is_locked()
+        if locked:
+            st.error(lock_msg)
+            return False
+
         user_input = st.text_input("Usuário")
         pwd_input = st.text_input("Senha", type="password")
 
         if st.button("Entrar", use_container_width=True):
-            users = {
-                "ismayllen@opyta.com.br": "123456",
-                "anamoreira@opyta.com.br": "123456",
-                "yurisimoes@opyta.com.br": "123456",
-                "wilder@opyta.com.br": "123456",
-                "felipetalin@opyta.com.br": "FTNblind19!",
-            }
+            users = _load_auth_users()
+            if not users:
+                st.error(
+                    "Autenticação não configurada. Defina AUTH_USERS_JSON em secrets/ambiente com hashes PBKDF2."
+                )
+                return False
 
-            if user_input in users and pwd_input == users[user_input]:
+            user_key = user_input.strip().lower()
+            stored_record = users.get(user_key, "")
+
+            # Delay mínimo para reduzir brute force por tentativa.
+            time.sleep(0.35)
+
+            if stored_record and _verify_password(pwd_input, stored_record):
                 st.session_state.logged_in = True
-                st.session_state.logged_user = user_input
+                st.session_state.logged_user = user_key
+                _reset_login_attempts()
                 st.rerun()
             else:
+                _register_failed_attempt()
+                remaining = max(0, 5 - int(st.session_state.get("failed_login_attempts", 0)))
                 st.error("Usuário ou senha incorretos.")
+                if remaining > 0:
+                    st.caption(f"Tentativas restantes antes de bloqueio temporário: {remaining}")
 
     return False
 
