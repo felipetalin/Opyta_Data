@@ -44,6 +44,7 @@ from core.engine import get_engine
 from runners.registry import ACTIONS, GROUP_TO_ACTION_KEY
 from runners.script_runner import run_python_script
 from validators.registry import VALIDATORS
+from validators.importacao import render_validation_report, validate_importacao_file
 
 
 # ------------------------------------------------
@@ -588,38 +589,69 @@ if "excel_para_migrar" not in st.session_state:
 if "clean_changes" not in st.session_state:
     st.session_state["clean_changes"] = 0
 
-btn_validate = st.button("Validar (corrige automaticamente)", disabled=(excel_path is None))
+btn_validate = st.button("Validar planilha", disabled=(excel_path is None), key="import_validate")
 
 if btn_validate:
     try:
         with st.spinner("Validando arquivo..."):
+            # Etapa 1: Limpeza automática de texto
             cleaned_path = runtime_dir / f"clean_{excel_path.name}"
             total_changes = write_clean_excel(excel_path, cleaned_path)
 
             st.session_state["clean_changes"] = int(total_changes)
             st.session_state["excel_para_migrar"] = str(cleaned_path)
+            st.success("Limpeza automática concluída")
+            st.metric("Correções de texto aplicadas", st.session_state["clean_changes"])
 
+            # Etapa 2: Validação estrutural (abas, colunas)
             xls_clean = pd.ExcelFile(cleaned_path)
-            ok, errors = VALIDATORS[grupo].validate(xls_clean)
+            ok_estrutural, errors_estrutural = VALIDATORS[grupo].validate(xls_clean)
 
-        st.success("Validação concluída com sucesso!")
-        st.metric("Correções automáticas aplicadas", st.session_state["clean_changes"])
-
-        if ok:
-            mark_stage_completed("importacao_status")
-            st.success("Arquivo validado e pronto para migrar.")
-            st.session_state["validated_ok"] = True
-            st.info("Pronto para migrar: a migração usará o arquivo corrigido automaticamente.")
-        else:
+        if not ok_estrutural:
             st.session_state["validated_ok"] = False
-            st.error("A validação encontrou pontos que precisam de ajuste.")
-            for e in errors:
+            st.error("Validação estrutural falhou:")
+            for e in errors_estrutural:
                 st.write("-", e)
             st.warning("Corrija os itens acima e valide novamente.")
+        else:
+            st.success("Estrutura validada ✅")
+
+            # Etapa 3: Validação de dados (coordenadas, espécies, esforço, refs cruzadas)
+            from io import BytesIO
+            engine = None
+            try:
+                engine = get_engine()
+                report = validate_importacao_file(
+                    BytesIO(Path(cleaned_path).read_bytes()),
+                    group=grupo,
+                    engine=engine,
+                )
+            finally:
+                if engine is not None:
+                    engine.dispose()
+
+            st.session_state["import_data_report"] = report
+
+            render_validation_report(report)
+
+            if report.can_proceed:
+                mark_stage_completed("importacao_status")
+                st.success("✅ Arquivo pronto para migração!")
+                st.session_state["validated_ok"] = True
+            else:
+                st.session_state["validated_ok"] = False
+                st.warning("Há bloqueios que impedem a migração. Corrija-os e valide novamente.")
+
     except Exception as exc:
         st.session_state["validated_ok"] = False
         st.error(f"Erro ao validar arquivo: {exc}")
 
+# Mostrar relatório de validação se disponível
+import_data_report = st.session_state.get("import_data_report")
+if import_data_report is not None and st.session_state.get("validated_ok") is None:
+    st.markdown("---")
+    st.markdown("### Último relatório de validação")
+    render_validation_report(import_data_report)
 
 # ============================================================
 # Migração
