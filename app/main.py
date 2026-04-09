@@ -381,10 +381,12 @@ with col5:
 with col6:
     st.markdown("""
     <div class="opyta-card">
-        <div class="opyta-tag">Em breve</div>
-        <h3>🔜 Relatórios</h3>
-        <p>Geração automática de relatórios técnicos e apresentações.</p>
+        <div class="opyta-tag">Geoambiental</div>
+        <h3>🗺️ Geoambiental</h3>
+        <p>Visualize e acompanhe camadas geográficas e informações espaciais do projeto.</p>
     </div>
     """, unsafe_allow_html=True)
+    if st.button("Abrir Geoambiental", use_container_width=True, key="go_geoambiental"):
+        st.switch_page("pages/6_Geoprocessamento.py")
 st.markdown("---")
 st.caption(f"Usuário conectado: {st.session_state.get('logged_user', '—')}")
