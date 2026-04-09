@@ -35,6 +35,7 @@ Cada grupo pode ter duas tipos de exceção:
         "Calanoida (copepodito)",
         "Bdelloida",
         "Bdelloida sp.",
+        "Mitilideo sp.",
     },
     "single_word_valid": {
         "Bdelloida",
@@ -44,19 +45,16 @@ Cada grupo pode ter duas tipos de exceção:
 
 **Motivo:** Esses táxons (cílios, ordens larvais e grupos de rotíferos) não seguem a nomenclatura binomial tradicional e são representantes de níveis taxonômicos acima de espécie. Não possuem gênero bem-definido e devem ser aceitos com `Genero = "N.A."`.
 
-### Bentos
+### Zoobentos / Bentos
 
-**Táxons especiais** (adicionados em commit `3944892`):
+**Tratativa antecipada (2026-04-09):**
 
-```python
-"Bentos": {
-    "skip_genus_check": {
-        "Mitilideo sp.",
-    },
-}
-```
+Para Zoobentos, o `Nome_Cientifico` pode representar o último nível taxonômico identificado (não necessariamente espécie). Por isso:
 
-**Motivo:** Mitilídeos são moluscos bivalves que podem aparecer apenas no nível de família/subfamília (Mytilidae), sem espécie bem-definida. A forma "Mitilideo sp." é válida quando a identificação não chega ao nível de espécie.
+- nomes com uma única palavra em Zoobentos não geram warning de `SINGLE_WORD_NAME`
+- regras de coerência de `Genero` são relaxadas quando o nome estiver em nível acima de espécie (ex.: nome único, `sp.`, `cf.`, `aff.`)
+
+**Motivo:** No trabalho de zoobentos é comum a identificação parar em níveis como família, ordem ou classe, e essa prática deve ser aceita como válida no cadastro.
 
 **Exemplo de linha válida (sem warnings):**
 | Nome_Cientifico | Grupo_Biologico | Genero |
@@ -158,6 +156,6 @@ Quando um novo grupo gerar warnings ou bloqueios recorrentes:
 
 | Grupo | Exceções skip_genus_check | Exceções single_word_valid | Data Adição |
 |---|---|---|---|
-| Zooplâncton | 8 | 1 | 2026-04-09 |
-| Bentos | 1 | 0 | 2026-04-09 |
+| Zooplâncton | 9 | 1 | 2026-04-09 |
+| Bentos/Zoobentos | tratativa por regra | tratativa por regra | 2026-04-09 |
 | *Próximo grupo* | — | — | — |

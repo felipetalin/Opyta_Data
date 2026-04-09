@@ -29,18 +29,21 @@ _EXCEPTIONS_BY_GROUP: dict[str, dict[str, list[str]]] = {
             "Calanoida (copepodito)",
             "Bdelloida",
             "Bdelloida sp.",
+            "Mitilideo sp.",
         },
         # Táxons que são nomes únicos válidos (não geram warning)
         "single_word_valid": {
             "Bdelloida",
         },
     },
-    "Bentos": {
-        "skip_genus_check": {
-            "Mitilideo sp.",
-        },
-    },
 }
+
+# Grupos de Zoobentos aceitos em diferentes variantes de preenchimento
+_ZOOBENTOS_GROUP_KEYS = {"bentos", "zoobentos"}
+
+
+def _is_zoobentos_group(group: str) -> bool:
+    return normalized_key(group) in _ZOOBENTOS_GROUP_KEYS
 
 
 def _is_exception_for_group(
@@ -125,6 +128,11 @@ def _check_scientific_name_format(df: pd.DataFrame, report: ValidationReport) ->
         if _is_exception_for_group(value, grupo_str, "single_word_valid"):
             continue
 
+        # Em Zoobentos, o táxon pode ser o último nível identificado.
+        # Ex.: família, ordem ou outro nível acima de espécie.
+        if _is_zoobentos_group(grupo_str) and _SINGLE_WORD.match(value.strip()):
+            continue
+
         # Nome com uma única palavra que não é marcador taxonômico nem família
         if _SINGLE_WORD.match(value.strip()):
             token = value.strip().lower()
@@ -168,6 +176,15 @@ def _check_genus_coherence(df: pd.DataFrame, report: ValidationReport) -> None:
 
         # Verificar se é exceção para este grupo
         if _is_exception_for_group(name_val, grupo_str, "skip_genus_check"):
+            continue
+
+        # Em Zoobentos, aceita-se nome no último nível taxonômico identificado.
+        # Nesses casos, a coerência estrita de gênero não é aplicável.
+        name_token = str(name_val).strip()
+        is_single_word = bool(_SINGLE_WORD.match(name_token))
+        name_tokens = normalized_key(name_token).split()
+        has_taxonomic_marker = any(tok in {"sp.", "cf.", "aff."} for tok in name_tokens)
+        if _is_zoobentos_group(grupo_str) and (is_single_word or has_taxonomic_marker):
             continue
 
         genus_norm = normalized_key(genus_val)
