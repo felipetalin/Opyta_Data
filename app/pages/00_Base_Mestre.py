@@ -1,9 +1,11 @@
 from __future__ import annotations
 
+from io import BytesIO
 import re
 from datetime import datetime
 from pathlib import Path
 
+import pandas as pd
 import streamlit as st
 from sqlalchemy import text
 
@@ -11,8 +13,10 @@ from core.app_state import initialize_system_status, mark_stage_completed, rende
 from core.engine import get_engine
 from core.sidebar import render_sidebar
 from core.supabase_client import get_supabase
+from core.ui.layout import inject_saas_styles
 from runners.script_runner import run_python_script
 from runners.registry import ACTIONS
+from validators.especies import render_validation_report, validate_especies_file
 
 # ------------------------------------------------
 # Verificação de login
@@ -33,6 +37,7 @@ if "logged_in" not in st.session_state or not st.session_state.logged_in:
     st.stop()
 
 initialize_system_status()
+inject_saas_styles()
 
 st.title("00 — Base Mestre")
 
@@ -237,6 +242,33 @@ def run_base_action(action_key: str, uploaded_bytes: bytes):
     return res
 
 
+def _uploaded_signature(uploaded_file) -> str | None:
+    if uploaded_file is None:
+        return None
+    payload = uploaded_file.getvalue()
+    return f"{uploaded_file.name}:{len(payload)}"
+
+
+def build_species_workbook_bytes(uploaded_bytes: bytes, cleaned_df: pd.DataFrame) -> bytes:
+    """Regrava a planilha preservando abas auxiliares e substituindo apenas Especies."""
+    source = BytesIO(uploaded_bytes)
+    output = BytesIO()
+    xls = pd.ExcelFile(source)
+
+    with pd.ExcelWriter(output, engine="openpyxl") as writer:
+        for sheet_name in xls.sheet_names:
+            if sheet_name == "Especies":
+                cleaned_df.to_excel(writer, sheet_name=sheet_name, index=False)
+            else:
+                pd.read_excel(xls, sheet_name=sheet_name).to_excel(
+                    writer,
+                    sheet_name=sheet_name,
+                    index=False,
+                )
+
+    return output.getvalue()
+
+
 # ----------------------------
 # UI
 # ----------------------------
@@ -270,8 +302,54 @@ with col1:
     st.subheader("Cadastrar Espécies")
     up = st.file_uploader("Upload cadastro_especies_opyta.xlsx", type=["xlsx"], key="up_especies")
 
-    if st.button("Rodar cadastro de espécies", disabled=(up is None)):
-        res = run_base_action("BASE_ESPECIES", up.getvalue())
+    current_signature = _uploaded_signature(up)
+    previous_signature = st.session_state.get("base_species_upload_signature")
+    if current_signature != previous_signature:
+        st.session_state["base_species_upload_signature"] = current_signature
+        st.session_state["base_species_report"] = None
+        st.session_state["base_species_ready_bytes"] = None
+
+    st.caption("Fluxo: upload → validar planilha → revisar correções e bloqueios → rodar cadastro")
+
+    validate_clicked = st.button(
+        "Validar planilha de espécies",
+        disabled=(up is None),
+        key="base_validate_species",
+    )
+
+    if validate_clicked and up is not None:
+        engine = None
+        try:
+            with st.spinner("Validando planilha de espécies..."):
+                engine = get_engine()
+                report = validate_especies_file(BytesIO(up.getvalue()), engine=engine)
+                st.session_state["base_species_report"] = report
+                if report.can_proceed and report.cleaned_df is not None:
+                    st.session_state["base_species_ready_bytes"] = build_species_workbook_bytes(
+                        up.getvalue(),
+                        report.cleaned_df,
+                    )
+                else:
+                    st.session_state["base_species_ready_bytes"] = None
+        finally:
+            if engine is not None:
+                engine.dispose()
+
+    species_report = st.session_state.get("base_species_report")
+    species_ready_bytes = st.session_state.get("base_species_ready_bytes")
+
+    if up is not None and species_report is None:
+        st.info("Envie a planilha e clique em 'Validar planilha de espécies' para ver o relatório visual antes do cadastro.")
+
+    if species_report is not None:
+        render_validation_report(species_report)
+
+    if st.button(
+        "Rodar cadastro de espécies",
+        disabled=(up is None or species_report is None or not species_report.can_proceed or species_ready_bytes is None),
+        key="base_run_species",
+    ):
+        res = run_base_action("BASE_ESPECIES", species_ready_bytes)
         parsed = parse_species_stdout(res.stdout or "")
         if res.status == "success":
             mark_stage_completed("base_mestre_status")
