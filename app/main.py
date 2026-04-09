@@ -14,7 +14,10 @@ if str(ROOT) not in sys.path:
 
 import streamlit as st
 from dotenv import load_dotenv
+from sqlalchemy import text
 
+from core.app_state import initialize_system_status, render_system_status
+from core.engine import get_engine
 from core.sidebar import render_sidebar
 
 load_dotenv()
@@ -303,7 +306,53 @@ def require_login():
 if not require_login():
     st.stop()
 
+initialize_system_status()
+
 render_sidebar()
+
+
+@st.cache_data(show_spinner=False, ttl=90)
+def get_home_health_metrics() -> dict:
+    out = {
+        "projetos": 0,
+        "grupos": 0,
+        "consolidados": 0,
+        "ultima_execucao": "-",
+        "db_ok": False,
+        "erro": None,
+    }
+
+    engine = None
+    try:
+        engine = get_engine()
+        with engine.begin() as conn:
+            out["projetos"] = int(
+                conn.execute(text("SELECT COUNT(DISTINCT nome_projeto) FROM biota_analise_consolidada")).scalar() or 0
+            )
+            out["grupos"] = int(
+                conn.execute(text("SELECT COUNT(DISTINCT grupo_biologico) FROM biota_analise_consolidada")).scalar() or 0
+            )
+            out["consolidados"] = int(
+                conn.execute(text("SELECT COUNT(*) FROM biota_analise_consolidada")).scalar() or 0
+            )
+
+            last_run = conn.execute(
+                text(
+                    """
+                    SELECT MAX(data_execucao)::text
+                    FROM import_logs
+                    """
+                )
+            ).scalar()
+            out["ultima_execucao"] = str(last_run or "-")
+            out["db_ok"] = True
+    except Exception as exc:
+        out["erro"] = str(exc)
+    finally:
+        if engine is not None:
+            engine.dispose()
+
+    return out
 
 st.markdown("""
 <div class="opyta-hero">
@@ -312,10 +361,35 @@ st.markdown("""
 </div>
 """, unsafe_allow_html=True)
 
+health = get_home_health_metrics()
+
+st.markdown("### Painel rápido")
+m1, m2, m3, m4 = st.columns(4)
+m1.metric("Projetos ativos", health["projetos"])
+m2.metric("Grupos processados", health["grupos"])
+m3.metric("Registros consolidados", health["consolidados"])
+m4.metric("Última execução", health["ultima_execucao"])
+
+if health["db_ok"]:
+    st.success("Banco conectado e métricas atualizadas.")
+else:
+    st.warning("Não foi possível carregar todas as métricas de saúde do sistema.")
+
 st.markdown(
     "📌 **Fluxo completo:** Base Mestre → Importação → Consolidação → Análises → Exportação\n"
     "Cada etapa prepara dados para a próxima. Comece cadastrando sua referência, depois importe e analise."
 )
+
+st.markdown("### Ações rápidas")
+q1, q2, q3 = st.columns(3)
+if q1.button("Nova Importação", use_container_width=True, key="quick_import"):
+    st.switch_page("pages/01_Importacao.py")
+if q2.button("Rodar Consolidação", use_container_width=True, key="quick_cons"):
+    st.switch_page("pages/02_Consolidacao.py")
+if q3.button("Exportar Dados", use_container_width=True, key="quick_export"):
+    st.switch_page("pages/04_Exportacao.py")
+
+render_system_status()
 
 col1, col2 = st.columns(2, gap="large")
 
