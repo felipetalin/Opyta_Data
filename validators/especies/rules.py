@@ -15,6 +15,52 @@ from .report import ValidationIssue, ValidationReport
 # Colunas obrigatórias com valor não-nulo
 _REQUIRED_VALUE_COLS = ["Nome_Cientifico", "Grupo_Biologico"]
 
+# Exceções de regras por grupo biológico
+# Alguns grupos têm táxons especiais que não seguem a nomenclatura científica padrão
+_EXCEPTIONS_BY_GROUP: dict[str, dict[str, list[str]]] = {
+    "Zooplâncton": {
+        # Táxons que podem ter gênero "N.A." ou não followem padrão
+        "skip_genus_check": {
+            "Ciliado ni",
+            "Ciliado NI",
+            "Cyclopoida (nauplius)",
+            "Cyclopoida (copepodito)",
+            "Calanoida (nauplius)",
+            "Calanoida (copepodito)",
+            "Bdelloida",
+        },
+        # Táxons que são nomes únicos válidos (não geram warning)
+        "single_word_valid": {
+            "Bdelloida",
+        },
+    },
+}
+
+
+def _is_exception_for_group(
+    taxa_name: str,
+    group: str,
+    exception_type: str,
+) -> bool:
+    """
+    Verifica se um táxon tem exceção de regra para seu grupo.
+
+    exception_type pode ser:
+    - "skip_genus_check": pula validação de coerência de gênero
+    - "single_word_valid": aceita nomes com uma única palavra
+    """
+    if group not in _EXCEPTIONS_BY_GROUP:
+        return False
+
+    exceptions = _EXCEPTIONS_BY_GROUP[group].get(exception_type, set())
+    taxa_norm = normalized_key(taxa_name)
+
+    for exc in exceptions:
+        if normalized_key(exc) == taxa_norm:
+            return True
+
+    return False
+
 
 def run_rules(df: pd.DataFrame, report: ValidationReport) -> None:
     """
@@ -60,9 +106,18 @@ def _check_scientific_name_format(df: pd.DataFrame, report: ValidationReport) ->
     if "Nome_Cientifico" not in df.columns:
         return
 
+    grupo_col = "Grupo_Biologico" if "Grupo_Biologico" in df.columns else None
+
     for idx, value in df["Nome_Cientifico"].items():
         if pd.isna(value) or not isinstance(value, str) or value.strip() == "":
             continue  # já tratado por _check_required_values
+
+        grupo = df.at[idx, grupo_col] if grupo_col else None
+        grupo_str = str(grupo).strip() if pd.notna(grupo) else ""
+
+        # Verificar se é exceção para este grupo
+        if _is_exception_for_group(value, grupo_str, "single_word_valid"):
+            continue
 
         # Nome com uma única palavra que não é marcador taxonômico nem família
         if _SINGLE_WORD.match(value.strip()):
@@ -92,13 +147,21 @@ def _check_genus_coherence(df: pd.DataFrame, report: ValidationReport) -> None:
     if "Genero" not in df.columns or "Nome_Cientifico" not in df.columns:
         return
 
+    grupo_col = "Grupo_Biologico" if "Grupo_Biologico" in df.columns else None
+
     for idx, row in df.iterrows():
         genus_val = row.get("Genero")
         name_val = row.get("Nome_Cientifico")
+        grupo = row.get(grupo_col) if grupo_col else None
+        grupo_str = str(grupo).strip() if pd.notna(grupo) else ""
 
         if pd.isna(genus_val) or not isinstance(genus_val, str) or genus_val.strip() == "":
             continue
         if pd.isna(name_val) or not isinstance(name_val, str) or name_val.strip() == "":
+            continue
+
+        # Verificar se é exceção para este grupo
+        if _is_exception_for_group(name_val, grupo_str, "skip_genus_check"):
             continue
 
         genus_norm = normalized_key(genus_val)
