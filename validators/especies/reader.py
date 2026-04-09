@@ -40,6 +40,7 @@ KNOWN_COLUMNS = {
     "BMWP_Score",
     # Colunas opcionais de fauna terrestre (migration 002)
     "Status_Estadual",
+    "Status_Ameaca_Estadual",  # alias aceito → mapeado para Status_Estadual
     "Status_Copam",
     "Cites",
     "Guilda_Alimentar",
@@ -48,6 +49,18 @@ KNOWN_COLUMNS = {
     "Sensibilidade_Ambiental",
     "Migratorio",
     "Raridade",
+}
+
+# Aliases aceitos: variações de nome que o usuário pode enviar na planilha.
+# Cada entrada é renomeada para o nome canônico antes de qualquer validação.
+# Isso garante que colunas com grafia alternativa migrem normalmente para o banco.
+_COLUMN_ALIASES: dict[str, str] = {
+    # BMWP: aceita lowercase e variações sem underscore
+    "bmwp_score": "BMWP_Score",
+    "bmwp": "BMWP_Score",
+    # Status estadual: aceita nome completo com ameaca
+    "Status_Ameaca_Estadual": "Status_Estadual",
+    "status_ameaca_estadual": "Status_Estadual",
 }
 
 
@@ -107,6 +120,26 @@ def read_sheet(
 
     # 4. Remover linhas totalmente em branco
     df = df.dropna(how="all").reset_index(drop=True)
+
+    # 4b. Normalizar aliases de colunas para nomes canônicos
+    alias_map = {
+        col: _COLUMN_ALIASES[col]
+        for col in df.columns
+        if col in _COLUMN_ALIASES and col != _COLUMN_ALIASES[col]
+    }
+    if alias_map:
+        df = df.rename(columns=alias_map)
+        for original, canonical in alias_map.items():
+            report.issues.append(
+                ValidationIssue(
+                    code="COLUMN_ALIAS_NORMALIZED",
+                    severity="info",
+                    message=(
+                        f"Coluna '{original}' reconhecida como '{canonical}' "
+                        "e será processada normalmente."
+                    ),
+                )
+            )
 
     if df.empty:
         report.issues.append(

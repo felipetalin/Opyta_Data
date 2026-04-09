@@ -137,8 +137,10 @@ def cadastrar_especies_principal(connection, df_especies):
     }
 
     # Colunas opcionais para fauna terrestre (migration 002)
+    # Aceita tanto "Status_Estadual" quanto "Status_Ameaca_Estadual" (alias do usuário)
     _rename_terrestre = {
         "Status_Estadual": "status_estadual",
+        "Status_Ameaca_Estadual": "status_estadual",
         "Status_Copam": "status_copam",
         "Cites": "cites",
         "Guilda_Alimentar": "guilda_alimentar",
