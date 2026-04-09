@@ -19,6 +19,7 @@ output/
 outputs/
 cache/
 tmp/
+runtime/
 
 # Dados
 data/
