@@ -36,6 +36,28 @@ Depois disso, o deploy automaticamente puxa as mudanças.
 - Modificações locais não estavam commitadas e pushadas para o branch de deploy (`deploy-cloud`).
 - O ambiente web estava rodando uma versão antiga desse branch.
 
+## Problema adicional já identificado
+
+**Sintoma:** o editor mostra a página já alterada, mas a versão web continua antiga mesmo após commit, push e reboot.
+
+**Causa possível:** o conteúdo alterado estava apenas no buffer do editor ou havia divergência entre o arquivo físico no disco e o conteúdo inspecionado durante a sessão. Na prática, isso fez parecer que a mudança estava pronta, mas o `HEAD` remoto ainda continha a versão antiga.
+
+**Como validar antes de publicar:**
+```bash
+git show HEAD:app/pages/01_Importacao.py
+Get-Content app/pages/01_Importacao.py
+git diff -- app/pages/01_Importacao.py
+```
+
+**Regra operacional:** quando a interface web não refletir uma alteração, confirmar nesta ordem:
+
+1. o arquivo físico no disco contém o bloco novo
+2. o `git diff` mostra a mudança esperada
+3. o commit contém a mudança esperada
+4. o `origin/deploy-cloud` contém esse commit
+
+Se qualquer uma dessas etapas falhar, o problema não é reboot nem cache, e sim divergência entre arquivo editado, conteúdo commitado e versão publicada.
+
 ## Passo a passo para validar antes do deploy
 
 1. Confirme a branch atual:
@@ -65,6 +87,12 @@ Depois disso, o deploy automaticamente puxa as mudanças.
    git log --oneline -1 origin/deploy-cloud
    ```
    O commit deve aparecer aqui.
+
+5.1. Quando a mudança for visual, confirme o conteúdo do arquivo publicado:
+   ```bash
+   git show HEAD:app/pages/01_Importacao.py
+   ```
+   Se o bloco novo não aparecer aqui, ele ainda não entrou no commit real.
 
 6. Verifique se o deploy usa o branch correto (`deploy-cloud`).
 
