@@ -16,7 +16,7 @@ import streamlit as st
 from dotenv import load_dotenv
 from sqlalchemy import text
 
-from core.app_state import initialize_system_status, render_system_status
+from core.app_state import initialize_system_status
 from core.engine import get_engine
 from core.sidebar import render_sidebar
 
@@ -380,16 +380,7 @@ st.markdown(
     "Cada etapa prepara dados para a próxima. Comece cadastrando sua referência, depois importe e analise."
 )
 
-st.markdown("### Ações rápidas")
-q1, q2, q3 = st.columns(3)
-if q1.button("Nova Importação", use_container_width=True, key="quick_import"):
-    st.switch_page("pages/01_Importacao.py")
-if q2.button("Rodar Consolidação", use_container_width=True, key="quick_cons"):
-    st.switch_page("pages/02_Consolidacao.py")
-if q3.button("Exportar Dados", use_container_width=True, key="quick_export"):
-    st.switch_page("pages/04_Exportacao.py")
 
-render_system_status()
 
 col1, col2 = st.columns(2, gap="large")
 
