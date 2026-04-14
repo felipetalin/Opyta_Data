@@ -138,6 +138,10 @@ health = get_importacao_health()
 
 st.markdown("### Visão operacional")
 render_executive_summary(
+    st.warning(
+        "⚠️ **IMPORTANTE:** Após importar seus dados, você DEVE executar a **Consolidação** para que os dados fiquem disponíveis para análise. "
+        "Muitas vezes os usuários se esquecem dessa etapa crítica. Acesse a página **02 - Consolidação** após terminar suas importações!"
+    )
     "Resumo da etapa",
     [
         {
@@ -701,6 +705,13 @@ import_result = st.session_state.get("import_result")
 if import_result:
     st.markdown("---")
     st.subheader("Resultado")
+
+    if import_result["status"] == "success":
+        st.success("Importacao concluida com sucesso!")
+        st.warning("PROXIMO PASSO OBRIGATORIO: Execute a Consolidacao para seus dados ficarem disponiveis para analise.")
+        if st.button("Ir para Consolidacao", use_container_width=True, key="import_button_consolidacao"):
+            st.switch_page("pages/02_Consolidacao.py")
+        st.markdown("---")
 
     resumo = import_result["resumo"]
     erros = 0 if import_result["status"] == "success" else 1
