@@ -30,11 +30,10 @@ from pathlib import Path
 import pandas as pd
 from sqlalchemy import text
 
-from core.app_state import initialize_system_status, mark_stage_completed, render_system_status
+from core.app_state import initialize_system_status, mark_stage_completed
 from core.ui.layout import (
     extract_alert_lines,
     inject_saas_styles,
-    render_action_buttons,
     render_alert_block,
     render_executive_summary,
     render_stepper,
@@ -161,42 +160,6 @@ render_executive_summary(
         },
     ],
 )
-
-top_col1, top_col2 = st.columns([1.35, 1])
-
-with top_col1:
-    with st.container(border=True):
-        st.markdown("#### Central de execução")
-        if health["db_ok"]:
-            st.success("Banco conectado. A etapa está pronta para validar e migrar arquivos.")
-        else:
-            st.warning("Não foi possível carregar todas as métricas da Importação.")
-            if health.get("erro"):
-                with st.expander("Detalhes técnicos do painel"):
-                    st.code(str(health["erro"]))
-
-        st.caption("Fluxo recomendado: selecionar grupo, validar o arquivo limpo e então executar a migração.")
-
-        action = render_action_buttons(
-            [
-                {"label": "Atualizar painel", "key": "import_refresh_health", "primary": True},
-                {"label": "Ir para Base Mestre", "key": "import_quick_base"},
-                {"label": "Ir para Consolidação", "key": "import_quick_consolidacao"},
-            ]
-        )
-
-        if action == "import_refresh_health":
-            get_importacao_health.clear()
-            st.rerun()
-        elif action == "import_quick_base":
-            st.switch_page("pages/00_Base_Mestre.py")
-        elif action == "import_quick_consolidacao":
-            st.switch_page("pages/02_Consolidacao.py")
-
-with top_col2:
-    render_system_status()
-    if st.button("Voltar ao Início", use_container_width=True, key="import_quick_home"):
-        st.switch_page("main.py")
 
 st.markdown("### Operação de importação")
 
