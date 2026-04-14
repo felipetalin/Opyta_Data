@@ -9,7 +9,7 @@ import pandas as pd
 import streamlit as st
 from sqlalchemy import text
 
-from core.app_state import initialize_system_status, mark_stage_completed, render_system_status
+from core.app_state import initialize_system_status, mark_stage_completed
 from core.engine import get_engine
 from core.sidebar import render_sidebar
 from core.supabase_client import get_supabase
@@ -284,15 +284,6 @@ if health["db_ok"]:
     st.success("Base conectada e métricas da etapa atualizadas.")
 else:
     st.warning("Não foi possível carregar todas as métricas da Base Mestre.")
-
-st.markdown("### Ações rápidas")
-a1, a2 = st.columns(2)
-if a1.button("Ir para Importação", use_container_width=True, key="base_quick_import"):
-    st.switch_page("pages/01_Importacao.py")
-if a2.button("Voltar ao Início", use_container_width=True, key="base_quick_home"):
-    st.switch_page("main.py")
-
-render_system_status()
 
 st.markdown("### Operações de cadastro")
 
