@@ -136,12 +136,13 @@ def get_importacao_health() -> dict:
 
 health = get_importacao_health()
 
+st.warning(
+    "⚠️ **IMPORTANTE:** Após importar seus dados, você DEVE executar a **Consolidação** para que os dados fiquem disponíveis para análise. "
+    "Muitas vezes os usuários se esquecem dessa etapa crítica. Acesse a página **02 - Consolidação** após terminar suas importações!"
+)
+
 st.markdown("### Visão operacional")
 render_executive_summary(
-    st.warning(
-        "⚠️ **IMPORTANTE:** Após importar seus dados, você DEVE executar a **Consolidação** para que os dados fiquem disponíveis para análise. "
-        "Muitas vezes os usuários se esquecem dessa etapa crítica. Acesse a página **02 - Consolidação** após terminar suas importações!"
-    )
     "Resumo da etapa",
     [
         {
