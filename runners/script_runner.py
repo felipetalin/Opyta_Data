@@ -23,6 +23,7 @@ def run_python_script(
     cwd: Optional[Path] = None,
     extra_env: Optional[dict[str, str]] = None,
     on_output_line: Optional[Callable[[str], None]] = None,
+    timeout_seconds: int = 3600,
 ) -> ScriptRunResult:
 
     args = args or []
@@ -32,9 +33,12 @@ def run_python_script(
     if extra_env:
         env.update(extra_env)
 
+    # Force unbuffered child output so Streamlit receives logs in near real time.
+    env.setdefault("PYTHONUNBUFFERED", "1")
+
     script_path = str(Path(script_path).resolve())
 
-    cmd = [sys.executable, script_path] + args
+    cmd = [sys.executable, "-u", script_path] + args
 
     try:
         if on_output_line is None:
@@ -44,7 +48,7 @@ def run_python_script(
                 env=env,
                 capture_output=True,
                 text=True,
-                timeout=600,
+                timeout=timeout_seconds,
             )
 
             return ScriptRunResult(
@@ -85,12 +89,12 @@ def run_python_script(
                         on_output_line(extra_line)
                 break
 
-            if time.monotonic() - start_time > 600:
+            if time.monotonic() - start_time > timeout_seconds:
                 proc.kill()
                 return ScriptRunResult(
                     status="error",
                     stdout="".join(stdout_lines),
-                    stderr="Script excedeu o tempo limite de execução.",
+                    stderr=f"Script excedeu o tempo limite de execução ({timeout_seconds}s).",
                     returncode=-1,
                 )
 
@@ -106,6 +110,6 @@ def run_python_script(
         return ScriptRunResult(
             status="error",
             stdout=e.stdout or "",
-            stderr="Script excedeu o tempo limite de execução.",
+            stderr=f"Script excedeu o tempo limite de execução ({timeout_seconds}s).",
             returncode=-1,
         )

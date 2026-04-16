@@ -1,0 +1,66 @@
+REGISTRO DE CONVERSA - PORTAL CLIENTE OPYTA
+Data: 2026-04-15
+
+OBJETIVO PRINCIPAL
+- Avaliar a viabilidade de criar um portal cliente em Next.js + TypeScript para visualizacao analitica geoespacial.
+- Garantir que o novo portal seja read-only e nao impacte o projeto atual.
+
+RESUMO DO QUE FOI DISCUTIDO
+1) Avaliacao inicial por arquivos .txt
+- Foi analisado o arquivo META_PROXIMAS_ETAPAS.txt como norte estrategico.
+- Foi lido requirements.txt para entender a base tecnica existente.
+- Conclusao: direcao de produto forte, foco correto em coerencia, rastreabilidade e previsibilidade.
+
+2) Viabilidade do portal cliente em Next.js
+- Foi confirmado que e totalmente viavel.
+- Escopo confirmado:
+  - /login
+  - /dashboard
+  - /projetos
+  - /projetos/[id]
+- Regras centrais confirmadas:
+  - read-only total
+  - sem cadastro publico
+  - sem importacao, consolidacao ou edicao
+  - usuario ve apenas projetos autorizados
+  - mapa como elemento central da analise
+
+3) Avaliacao da base geoambiental atual (Streamlit)
+- Foi analisada a pagina de geoprocessamento e modulos relacionados.
+- Pontos aproveitaveis:
+  - estrutura analitica (KPIs, mapa, insights)
+  - servicos de dados e agregacao por ponto/campanha
+  - separacao entre camada de consulta e apresentacao
+- Pontos a simplificar para V1 cliente:
+  - remover complexidade operacional
+  - evitar funcoes como exportacao e acoes nao essenciais
+  - manter filtros simples e linguagem nao tecnica
+
+4) Estrategia para nao impactar o projeto atual
+- Recomendacao: criar portal em pasta/repositorio separado.
+- Nao alterar arquivos do sistema atual.
+- Usar .env proprio, pipeline proprio e camada segura de leitura.
+
+5) Caminho de pasta sugerido e validado
+- Pasta indicada pelo usuario: G:\Meu Drive\Opyta_Data_Versao_Cliente
+- Orientacao dada:
+  - abrir essa pasta vazia no VS Code
+  - apos abrir, iniciar scaffold do novo Next.js isolado
+
+6) Risco historico de deploy e commit
+- Usuario destacou preocupacao com problemas anteriores de deploy e commits.
+- Diretriz acordada:
+  - iniciar projeto com boas praticas desde o inicio
+  - padroes de qualidade e seguranca para reduzir risco operacional
+
+DECISOES CONSOLIDADAS
+- O novo portal sera construido fora do projeto atual.
+- O escopo da V1 e de visualizacao, sem escrita.
+- O mapa sera o centro da pagina de projeto.
+- O foco de UX sera clareza para usuario nao tecnico.
+
+PROXIMO PASSO COMBINADO
+- Abrir a pasta nova isolada no VS Code.
+- Depois disso, gerar a base Next.js com arquitetura modular e boas praticas de engenharia.
+
+FIM DO REGISTRO

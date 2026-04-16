@@ -261,14 +261,27 @@ def get_runtime_env() -> dict[str, str]:
 
     database_url = None
 
-    try:
-        database_url = st.secrets["DATABASE_URL"]
-    except Exception:
-        database_url = os.getenv("DATABASE_URL")
+    def _read_secret_or_env(key: str) -> str | None:
+        try:
+            value = st.secrets[key]
+            if value:
+                return str(value).strip()
+        except Exception:
+            pass
+
+        value = os.getenv(key)
+        if value:
+            return str(value).strip()
+
+        return None
+
+    database_url = _read_secret_or_env("DATABASE_URL")
+    if not database_url:
+        database_url = _read_secret_or_env("SUPABASE_DB_URL")
 
     if not database_url:
         raise RuntimeError(
-            "DATABASE_URL não encontrada. Configure esse secret no Streamlit Cloud."
+            "Conexao de banco nao configurada. Defina DATABASE_URL ou SUPABASE_DB_URL em secrets/ambiente."
         )
 
     env["DATABASE_URL"] = str(database_url).strip()
