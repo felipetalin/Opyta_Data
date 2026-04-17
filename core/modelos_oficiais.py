@@ -1,10 +1,15 @@
 from __future__ import annotations
 
 from io import BytesIO
+from typing import Any
 
 import streamlit as st
-from openpyxl import Workbook
-from openpyxl.styles import Font, PatternFill
+
+
+def _new_workbook() -> Any:
+    from openpyxl import Workbook
+
+    return Workbook()
 
 
 IMPORT_TEMPLATE_SPECS: dict[str, dict[str, object]] = {
@@ -34,6 +39,8 @@ MASTER_PARAMETROS_SHEETS: dict[str, list[str]] = {
 
 
 def _apply_header_style(cell) -> None:
+    from openpyxl.styles import Font, PatternFill
+
     cell.font = Font(bold=True, color="FFFFFF")
     cell.fill = PatternFill(fill_type="solid", fgColor="1F4E78")
 
@@ -47,7 +54,7 @@ def _style_sheet_headers(sheet) -> None:
         sheet.column_dimensions[column_cells[0].column_letter].width = min(max_length + 4, 36)
 
 
-def _append_dictionary_sheet(workbook: Workbook, rows: list[tuple[str, str, str, str]]) -> None:
+def _append_dictionary_sheet(workbook: Any, rows: list[tuple[str, str, str, str]]) -> None:
     ws = workbook.create_sheet("Dicionario")
     ws.append(["Aba", "Coluna", "Obrigatoria", "Cuidado"])
     for row in rows:
@@ -55,7 +62,7 @@ def _append_dictionary_sheet(workbook: Workbook, rows: list[tuple[str, str, str,
     _style_sheet_headers(ws)
 
 
-def _append_import_readme(workbook: Workbook, group: str, result_sheet: str) -> None:
+def _append_import_readme(workbook: Any, group: str, result_sheet: str) -> None:
     ws = workbook.active
     ws.title = "Leia-me"
     lines = [
@@ -75,7 +82,7 @@ def _append_import_readme(workbook: Workbook, group: str, result_sheet: str) -> 
     ws.column_dimensions["A"].width = 100
 
 
-def _append_base_species_readme(workbook: Workbook) -> None:
+def _append_base_species_readme(workbook: Any) -> None:
     ws = workbook.active
     ws.title = "Leia-me"
     lines = [
@@ -94,7 +101,7 @@ def _append_base_species_readme(workbook: Workbook) -> None:
     ws.column_dimensions["A"].width = 110
 
 
-def _append_base_parametros_readme(workbook: Workbook) -> None:
+def _append_base_parametros_readme(workbook: Any) -> None:
     ws = workbook.active
     ws.title = "Leia-me"
     lines = [
@@ -115,7 +122,7 @@ def _append_base_parametros_readme(workbook: Workbook) -> None:
 @st.cache_data(show_spinner=False)
 def build_group_template_bytes(group: str) -> bytes:
     spec = IMPORT_TEMPLATE_SPECS[group]
-    workbook = Workbook()
+    workbook = _new_workbook()
     _append_import_readme(workbook, group, str(spec["result_sheet"]))
 
     dictionary_rows: list[tuple[str, str, str, str]] = []
@@ -175,7 +182,7 @@ def get_group_template_filename(group: str) -> str:
 
 @st.cache_data(show_spinner=False)
 def build_master_species_template_bytes() -> bytes:
-    workbook = Workbook()
+    workbook = _new_workbook()
     _append_base_species_readme(workbook)
     dictionary_rows: list[tuple[str, str, str, str]] = []
     required_species = {"Nome_Cientifico", "Grupo_Biologico"}
@@ -208,7 +215,7 @@ def get_master_species_template_filename() -> str:
 
 @st.cache_data(show_spinner=False)
 def build_master_parameters_template_bytes() -> bytes:
-    workbook = Workbook()
+    workbook = _new_workbook()
     _append_base_parametros_readme(workbook)
     dictionary_rows: list[tuple[str, str, str, str]] = []
 
