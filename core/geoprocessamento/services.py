@@ -79,28 +79,28 @@ def _corrigir_coordenadas_invertidas(df: pd.DataFrame) -> pd.DataFrame:
     return work
 
 
-@st.cache_data(show_spinner=False, ttl=60)
+@st.cache_data(show_spinner=False, ttl=3600)  # Cache por 1 hora
 def carregar_projetos(modo: ModoGeo) -> list[str]:
     engine = get_engine()
     with engine.connect() as conn:
         return listar_projetos(conn, modo)
 
 
-@st.cache_data(show_spinner=False, ttl=60)
+@st.cache_data(show_spinner=False, ttl=3600)  # Cache por 1 hora
 def carregar_campanhas(modo: ModoGeo, projetos: list[str]) -> list[str]:
     engine = get_engine()
     with engine.connect() as conn:
         return listar_campanhas(conn, modo, projetos, [])
 
 
-@st.cache_data(show_spinner=False, ttl=60)
+@st.cache_data(show_spinner=False, ttl=3600)  # Cache por 1 hora
 def carregar_empreendimentos(modo: ModoGeo, projetos: list[str]) -> list[str]:
     engine = get_engine()
     with engine.connect() as conn:
         return listar_empreendimentos(conn, modo, projetos)
 
 
-@st.cache_data(show_spinner=False, ttl=60)
+@st.cache_data(show_spinner=False, ttl=3600)  # Cache por 1 hora
 def carregar_campanhas_filtradas(
     modo: ModoGeo,
     projetos: list[str],
@@ -111,7 +111,7 @@ def carregar_campanhas_filtradas(
         return listar_campanhas(conn, modo, projetos, empreendimentos)
 
 
-@st.cache_data(show_spinner=False, ttl=60)
+@st.cache_data(show_spinner=False, ttl=3600)  # Cache por 1 hora
 def carregar_grupos_biologicos(
     projetos: list[str],
     empreendimentos: list[str],
@@ -122,7 +122,7 @@ def carregar_grupos_biologicos(
         return listar_grupos_biologicos(conn, projetos, empreendimentos, campanhas)
 
 
-@st.cache_data(show_spinner=False, ttl=60)
+@st.cache_data(show_spinner=False, ttl=3600)  # Cache por 1 hora (dados geo não mudam constantemente)
 def carregar_dados_geo(
     modo: ModoGeo,
     projetos: list[str],
@@ -157,6 +157,7 @@ def carregar_dados_geo(
     return calcular_indicadores_fisicos_por_ponto(df)
 
 
+@st.cache_data(hash_funcs={pd.DataFrame: id}, ttl=3600, show_spinner=False)
 def calcular_resumo_geo(df: pd.DataFrame, modo: ModoGeo) -> dict[str, float]:
     if df.empty:
         base = {
@@ -216,6 +217,7 @@ def calcular_resumo_geo(df: pd.DataFrame, modo: ModoGeo) -> dict[str, float]:
     return resumo
 
 
+@st.cache_data(hash_funcs={pd.DataFrame: id}, ttl=3600, show_spinner=False)
 def preparar_dados_mapa_media_campanhas(df: pd.DataFrame, modo: ModoGeo) -> pd.DataFrame:
     if df.empty:
         return df
