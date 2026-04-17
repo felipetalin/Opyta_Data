@@ -11,6 +11,12 @@ from sqlalchemy import text
 
 from core.app_state import initialize_system_status, mark_stage_completed
 from core.engine import get_engine
+from core.modelos_oficiais import (
+    build_master_parameters_template_bytes,
+    build_master_species_template_bytes,
+    get_master_parameters_template_filename,
+    get_master_species_template_filename,
+)
 from core.sidebar import render_sidebar
 from core.supabase_client import get_supabase
 from core.ui.layout import inject_saas_styles
@@ -269,6 +275,36 @@ def build_species_workbook_bytes(uploaded_bytes: bytes, cleaned_df: pd.DataFrame
     return output.getvalue()
 
 
+def validate_parametros_workbook(uploaded_bytes: bytes) -> dict[str, object]:
+    expected_sheets = {
+        "Aguas_Superficiais",
+        "Aguas_Subterraneas",
+        "Sedimento",
+        "Efluentes",
+    }
+    summary: dict[str, object] = {
+        "ok": False,
+        "missing_sheets": [],
+        "missing_parametro": [],
+        "empty_sheets": [],
+    }
+
+    xls = pd.ExcelFile(BytesIO(uploaded_bytes))
+    available = set(xls.sheet_names)
+    summary["missing_sheets"] = sorted(expected_sheets - available)
+
+    for sheet_name in sorted(expected_sheets & available):
+        df = pd.read_excel(xls, sheet_name=sheet_name).dropna(how="all")
+        if df.empty:
+            summary["empty_sheets"].append(sheet_name)
+            continue
+        if "Parametro" not in df.columns:
+            summary["missing_parametro"].append(sheet_name)
+
+    summary["ok"] = not summary["missing_sheets"] and not summary["missing_parametro"]
+    return summary
+
+
 # ----------------------------
 # UI
 # ----------------------------
@@ -285,12 +321,34 @@ if health["db_ok"]:
 else:
     st.warning("Não foi possível carregar todas as métricas da Base Mestre.")
 
+st.markdown("### Modelos oficiais")
+dl1, dl2 = st.columns(2)
+with dl1:
+    st.download_button(
+        label="Baixar modelo oficial de espécies",
+        data=build_master_species_template_bytes(),
+        file_name=get_master_species_template_filename(),
+        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        use_container_width=True,
+        key="download_base_especies",
+    )
+with dl2:
+    st.download_button(
+        label="Baixar modelo oficial de parâmetros",
+        data=build_master_parameters_template_bytes(),
+        file_name=get_master_parameters_template_filename(),
+        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        use_container_width=True,
+        key="download_base_parametros",
+    )
+
 st.markdown("### Operações de cadastro")
 
 col1, col2 = st.columns(2)
 
 with col1:
     st.subheader("Cadastrar Espécies")
+    st.caption("Use o modelo oficial. Campos mínimos: Nome_Cientifico e Grupo_Biologico. Abas auxiliares opcionais: Bacias_Hidrograficas, Biomas e Endemismo.")
     up = st.file_uploader("Upload cadastro_especies_opyta.xlsx", type=["xlsx"], key="up_especies")
 
     current_signature = _uploaded_signature(up)
@@ -348,9 +406,52 @@ with col1:
 
 with col2:
     st.subheader("Cadastrar Parâmetros")
+    st.caption("Use o modelo oficial. As abas obrigatórias são Aguas_Superficiais, Aguas_Subterraneas, Sedimento e Efluentes, todas com a coluna Parametro.")
     up = st.file_uploader("Upload cadastro_parametros_opyta.xlsx", type=["xlsx"], key="up_parametros")
 
-    if st.button("Rodar cadastro de parâmetros", disabled=(up is None)):
+    current_signature = _uploaded_signature(up)
+    previous_signature = st.session_state.get("base_param_upload_signature")
+    if current_signature != previous_signature:
+        st.session_state["base_param_upload_signature"] = current_signature
+        st.session_state["base_param_validation"] = None
+
+    validate_param_clicked = st.button(
+        "Validar planilha de parâmetros",
+        disabled=(up is None),
+        key="base_validate_parametros",
+    )
+
+    if validate_param_clicked and up is not None:
+        try:
+            with st.spinner("Validando planilha de parâmetros..."):
+                st.session_state["base_param_validation"] = validate_parametros_workbook(up.getvalue())
+        except Exception as exc:
+            st.session_state["base_param_validation"] = {
+                "ok": False,
+                "missing_sheets": [],
+                "missing_parametro": [],
+                "empty_sheets": [],
+                "error": str(exc),
+            }
+
+    param_validation = st.session_state.get("base_param_validation")
+    if up is not None and param_validation is None:
+        st.info("Envie a planilha e clique em 'Validar planilha de parâmetros' para checar abas e cabeçalhos antes do cadastro.")
+
+    if param_validation is not None:
+        if param_validation.get("error"):
+            st.error(f"Erro ao validar planilha de parâmetros: {param_validation['error']}")
+        elif param_validation["ok"]:
+            st.success("Estrutura da planilha de parâmetros validada ✅")
+        else:
+            if param_validation["missing_sheets"]:
+                st.error(f"Abas ausentes: {param_validation['missing_sheets']}")
+            if param_validation["missing_parametro"]:
+                st.error(f"Abas sem coluna 'Parametro': {param_validation['missing_parametro']}")
+            if param_validation["empty_sheets"]:
+                st.warning(f"Abas vazias: {param_validation['empty_sheets']}")
+
+    if st.button("Rodar cadastro de parâmetros", disabled=(up is None or param_validation is None or not param_validation.get("ok", False))):
         res = run_base_action("BASE_PARAMETROS", up.getvalue())
         parsed = parse_parametros_stdout(res.stdout or "")
         if res.status == "success":
