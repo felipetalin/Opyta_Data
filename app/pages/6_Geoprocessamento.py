@@ -10,6 +10,11 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from core.sidebar import render_sidebar
+from core.ui.design_system import (
+    render_section_header,
+    render_empty_state,
+    render_info_box,
+)
 from core.geoprocessamento.components import (
     render_actions,
     render_biological_group_filter,

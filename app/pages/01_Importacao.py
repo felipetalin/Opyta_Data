@@ -39,6 +39,11 @@ from core.ui.layout import (
     render_stepper,
     render_technical_log,
 )
+from core.ui.design_system import (
+    render_section_header,
+    render_status_badge,
+    render_info_box,
+)
 from core.engine import get_engine
 from runners.registry import ACTIONS, GROUP_TO_ACTION_KEY
 from runners.script_runner import run_python_script
@@ -64,8 +69,10 @@ inject_saas_styles()
 
 st.title("01 — Importação")
 
-st.markdown(
-    "Fluxo guiado com validacao, migracao monitorada e resultado executivo para tomada de decisao."
+render_section_header(
+    "Fluxo de Importação",
+    icon="📥",
+    subtitle="Validação, migração monitorada e resultado executivo para tomada de decisão"
 )
 
 # Raiz do projeto: .../Opyta_Data
@@ -590,12 +597,12 @@ if btn_validate:
 
         if not ok_estrutural:
             st.session_state["validated_ok"] = False
-            st.error("Validação estrutural falhou:")
+            render_info_box("Validação estrutural falhou", box_type="error")
             for e in errors_estrutural:
                 st.write("-", e)
-            st.warning("Corrija os itens acima e valide novamente.")
+            render_info_box("Corrija os itens acima e valide novamente.", box_type="warning")
         else:
-            st.success("Estrutura validada ✅")
+            render_info_box("Estrutura validada ✅", box_type="success")
 
             # Etapa 3: Validação de dados (coordenadas, espécies, esforço, refs cruzadas)
             from io import BytesIO
@@ -617,15 +624,15 @@ if btn_validate:
 
             if report.can_proceed:
                 mark_stage_completed("importacao_status")
-                st.success("✅ Arquivo pronto para migração!")
+                render_info_box("✅ Arquivo pronto para migração!", box_type="success")
                 st.session_state["validated_ok"] = True
             else:
                 st.session_state["validated_ok"] = False
-                st.warning("Há bloqueios que impedem a migração. Corrija-os e valide novamente.")
+                render_info_box("Há bloqueios que impedem a migração. Corrija-os e valide novamente.", box_type="warning")
 
     except Exception as exc:
         st.session_state["validated_ok"] = False
-        st.error(f"Erro ao validar arquivo: {exc}")
+        render_info_box(f"Erro ao validar arquivo: {exc}", box_type="error")
 
 # Mostrar relatório de validação se disponível
 import_data_report = st.session_state.get("import_data_report")
@@ -686,13 +693,14 @@ if st.button("Migrar", disabled=not can_migrate):
             state="complete" if res.status == "success" else "error",
         )
 
+
         ok = getattr(res, "status", "") == "success"
 
         if ok:
             mark_stage_completed("importacao_status")
-            st.success("Migração concluída com sucesso!")
+            render_info_box("Migração concluída com sucesso!", box_type="success")
         else:
-            st.error("A migração terminou com erro.")
+            render_info_box("A migração terminou com erro.", box_type="error")
 
         stdout = getattr(res, "stdout", "") or ""
         stderr = getattr(res, "stderr", "") or ""
@@ -712,7 +720,7 @@ if st.button("Migrar", disabled=not can_migrate):
             "registros_inseridos": parse_inserted_records(stdout),
         }
     except Exception as exc:
-        st.error(f"Erro ao migrar dados: {exc}")
+        render_info_box(f"Erro ao migrar dados: {exc}", box_type="error")
 
 
 import_result = st.session_state.get("import_result")
@@ -721,8 +729,8 @@ if import_result:
     st.subheader("Resultado")
 
     if import_result["status"] == "success":
-        st.success("Importacao concluida com sucesso!")
-        st.warning("PROXIMO PASSO OBRIGATORIO: Execute a Consolidacao para seus dados ficarem disponiveis para analise.")
+        render_info_box("Importacao concluida com sucesso!", box_type="success")
+        render_info_box("PRÓXIMO PASSO: Execute a Consolidação para seus dados ficarem disponíveis para análise.", box_type="warning")
         if st.button("Ir para Consolidacao", use_container_width=True, key="import_button_consolidacao"):
             st.switch_page("pages/02_Consolidacao.py")
         st.markdown("---")
