@@ -44,6 +44,7 @@ from core.ui.design_system import (
     render_status_badge,
     render_info_box,
 )
+from core.modelos_oficiais import build_group_template_bytes, get_group_template_filename
 from core.engine import get_engine
 from runners.registry import ACTIONS, GROUP_TO_ACTION_KEY
 from runners.script_runner import run_python_script
@@ -514,7 +515,21 @@ if "import_result" not in st.session_state:
     st.session_state["import_result"] = None
 
 grupo = st.selectbox("Grupo", list(GROUP_TO_ACTION_KEY.keys()))
-uploaded = st.file_uploader("Upload do Excel", type=["xlsx"])
+
+template_col, upload_col = st.columns([1.1, 1.9], gap="large")
+with template_col:
+    render_info_box("Baixe o modelo oficial antes de preparar a planilha, para reduzir erro de validação.", box_type="info")
+    st.download_button(
+        label="Baixar modelo oficial",
+        data=build_group_template_bytes(grupo),
+        file_name=get_group_template_filename(grupo),
+        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        use_container_width=True,
+        key=f"download_modelo_{grupo}",
+    )
+
+with upload_col:
+    uploaded = st.file_uploader("Upload do Excel", type=["xlsx"])
 
 
 def _uploaded_signature(file_obj) -> str | None:
