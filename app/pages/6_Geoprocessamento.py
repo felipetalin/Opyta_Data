@@ -36,6 +36,12 @@ from core.geoprocessamento.components import (
     render_table,
 )
 from core.geoprocessamento.map_view import render_mapa_geo
+from core.geoprocessamento.plotly_interactive import (
+    render_scatter_interativo,
+    render_serie_temporal_por_ponto,
+    render_distribuicao_indicador,
+    render_comparacao_indicadores,
+)
 from core.geoprocessamento.services import (
     calcular_resumo_geo,
     carregar_campanhas_filtradas,
@@ -127,11 +133,34 @@ if df_geo.empty:
 else:
     render_insights(df_geo, modo)
 
-    map_col, rank_col = st.columns([2.7, 1.3], gap="large")
-    with map_col:
-        render_mapa_geo(df_geo_mapa, modo, indicador)
-    with rank_col:
-        render_ranking(df_geo, modo)
+    # ========================================================
+    # Abas interativas de exploração de dados
+    # ========================================================
+    tab_mapa, tab_scatter, tab_temporal, tab_dist = st.tabs([
+        "📍 Mapa Leaflet",
+        "🔴 Scatter Plotly",
+        "📈 Série Temporal",
+        "📊 Distribuição",
+    ])
+    
+    with tab_mapa:
+        map_col, rank_col = st.columns([2.7, 1.3], gap="large")
+        with map_col:
+            render_mapa_geo(df_geo_mapa, modo, indicador)
+        with rank_col:
+            render_ranking(df_geo, modo)
+    
+    with tab_scatter:
+        st.markdown("#### Distribuição Espacial (Plotly)")
+        render_scatter_interativo(df_geo, modo, indicador, title=f"Mapa de Calor - {indicador}")
+    
+    with tab_temporal:
+        st.markdown("#### Evolução Temporal do Indicador")
+        render_serie_temporal_por_ponto(df_geo, modo, indicador)
+    
+    with tab_dist:
+        st.markdown("#### Análise de Distribuição")
+        render_distribuicao_indicador(df_geo, modo, indicador)
 
     action = render_actions(df_geo, modo)
     if action == "geo_compare":
