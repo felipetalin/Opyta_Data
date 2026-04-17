@@ -76,7 +76,6 @@ def render_scatter_interativo(
                 opacity=0.7,
                 line=dict(width=1, color="#333"),
             ),
-            hovertemplate="<b>Localização</b><br>Lat: %{lat:.4f}<br>Lon: %{lon:.4f}<br><extra></extra>",
             text=hover_text,
             customdata=hover_text,
             hovertemplate="%{customdata}<extra></extra>",
@@ -192,7 +191,7 @@ def render_serie_temporal_por_ponto(
         title=f"{title_prefix} - {indicador} ao longo do tempo",
         hovermode="x unified",
         xaxis_title="Campanha",
-        yaxis_title=f"{indicador} ({getattr(df.get(f'{indicador}_unit', 'unidade'))}" + (")" if df.get(f"{indicador}_unit") else ""),
+        yaxis_title=indicador,
         height=400,
         margin=dict(l=50, r=20, t=40, b=50),
     )
