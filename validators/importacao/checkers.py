@@ -5,12 +5,35 @@ Validações específicas: pontos, espécies, esforço, referências cruzadas.
 from __future__ import annotations
 
 import re
+import unicodedata
 
 import pandas as pd
 from sqlalchemy.engine import Engine
 from sqlalchemy import text
 
 from .report import ValidationIssue, ValidationReport
+
+
+def _norm_text(value: object) -> str:
+    if pd.isna(value):
+        return ""
+    text_value = str(value).replace("\u00A0", " ")
+    text_value = unicodedata.normalize("NFKC", text_value)
+    text_value = re.sub(r"\s+", " ", text_value).strip().lower()
+    return text_value
+
+
+def _find_column(df: pd.DataFrame, predicates: list[tuple[str, ...]]) -> str | None:
+    """Procura uma coluna usando combinações de fragmentos no nome normalizado."""
+    if df is None or df.empty:
+        return None
+
+    cols_norm = {col: _norm_text(col) for col in df.columns}
+    for tokens in predicates:
+        for col, norm_col in cols_norm.items():
+            if all(token in norm_col for token in tokens):
+                return col
+    return None
 
 
 def check_pontos(df_pontos: pd.DataFrame, report: ValidationReport) -> None:
@@ -217,5 +240,142 @@ def check_referencias_cruzadas(
                     f"Total: {len(missing_pontos)}."
                 ),
                 lines=[p[0] for p in missing_pontos[:10]],
+            )
+        )
+
+
+def check_resultados_vs_esforco(
+    df_resultados: pd.DataFrame,
+    df_esforco: pd.DataFrame,
+    group: str,
+    report: ValidationReport,
+) -> None:
+    """
+    Valida vínculo obrigatório Resultado -> Metadados_Esforco por chave composta.
+    Bloqueia migração quando existir resultado sem esforço correspondente.
+    """
+    if df_resultados is None or df_resultados.empty:
+        return
+
+    if df_esforco is None or df_esforco.empty:
+        report.issues.append(
+            ValidationIssue(
+                code="EMPTY_EFFORT_SHEET",
+                severity="block",
+                message=(
+                    f"Grupo '{group}': a aba Metadados_Esforco está vazia, mas há resultados informados."
+                ),
+            )
+        )
+        return
+
+    # Colunas mínimas para chave composta entre resultados e esforço.
+    res_camp = _find_column(df_resultados, [("campanha",)])
+    res_ponto = _find_column(df_resultados, [("ponto",)])
+    res_metodo = _find_column(df_resultados, [("metodo",), ("captura",)])
+    res_tipo = _find_column(df_resultados, [("tipo", "amostr")])
+
+    esf_camp = _find_column(df_esforco, [("campanha",)])
+    esf_ponto = _find_column(df_esforco, [("ponto",)])
+    esf_metodo = _find_column(df_esforco, [("metodo",), ("captura",)])
+    esf_tipo = _find_column(df_esforco, [("tipo", "amostr")])
+
+    res_species = _find_column(
+        df_resultados,
+        [("nome", "cient"), ("especie",), ("taxa",)],
+    )
+
+    missing_res = [
+        name
+        for name, col in [
+            ("Campanha", res_camp),
+            ("Ponto", res_ponto),
+            ("Metodo_de_Captura", res_metodo),
+            ("Tipo_de_Amostragem", res_tipo),
+        ]
+        if col is None
+    ]
+    missing_esf = [
+        name
+        for name, col in [
+            ("Campanha", esf_camp),
+            ("Ponto", esf_ponto),
+            ("Metodo_de_Captura", esf_metodo),
+            ("Tipo_de_Amostragem", esf_tipo),
+        ]
+        if col is None
+    ]
+
+    if missing_res or missing_esf:
+        parts = []
+        if missing_res:
+            parts.append(f"colunas ausentes em resultados: {missing_res}")
+        if missing_esf:
+            parts.append(f"colunas ausentes em Metadados_Esforco: {missing_esf}")
+        report.issues.append(
+            ValidationIssue(
+                code="MISSING_EFFORT_LINK_COLUMNS",
+                severity="block",
+                message=(
+                    f"Grupo '{group}': não foi possível validar vínculo resultado-esforço; "
+                    + "; ".join(parts)
+                    + "."
+                ),
+            )
+        )
+        return
+
+    def _key(row: pd.Series, camp_col: str, ponto_col: str, metodo_col: str, tipo_col: str) -> tuple[str, str, str, str]:
+        return (
+            _norm_text(row.get(camp_col)),
+            _norm_text(row.get(ponto_col)),
+            _norm_text(row.get(metodo_col)),
+            _norm_text(row.get(tipo_col)),
+        )
+
+    effort_keys = set()
+    for _, row in df_esforco.iterrows():
+        key = _key(row, esf_camp, esf_ponto, esf_metodo, esf_tipo)
+        if all(key):
+            effort_keys.add(key)
+
+    if not effort_keys:
+        report.issues.append(
+            ValidationIssue(
+                code="EMPTY_EFFORT_KEYS",
+                severity="block",
+                message=(
+                    f"Grupo '{group}': nenhum esforço válido encontrado em Metadados_Esforco "
+                    "(chave campanha+ponto+método+tipo)."
+                ),
+            )
+        )
+        return
+
+    invalid_refs: list[tuple[int, str, tuple[str, str, str, str]]] = []
+    for idx, row in df_resultados.iterrows():
+        key = _key(row, res_camp, res_ponto, res_metodo, res_tipo)
+        if not all(key) or key not in effort_keys:
+            especie = _norm_text(row.get(res_species)) if res_species else ""
+            invalid_refs.append((idx + 2, especie, key))
+
+    if invalid_refs:
+        examples = []
+        for line, especie, (camp, ponto, metodo, tipo) in invalid_refs[:5]:
+            examples.append(
+                f"linha {line} | especie='{especie or '-'}' | "
+                f"esforco='{camp} | {ponto} | {metodo} | {tipo}'"
+            )
+
+        report.issues.append(
+            ValidationIssue(
+                code="INVALID_EFFORT_REFERENCE",
+                severity="block",
+                message=(
+                    f"Grupo '{group}': {len(invalid_refs)} registro(s) de resultados sem esforço válido "
+                    "nos metadados (campanha+ponto+método+tipo). Exemplos: "
+                    + " ; ".join(examples)
+                ),
+                lines=[line for line, _, _ in invalid_refs[:10]],
             )
         )

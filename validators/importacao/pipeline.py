@@ -19,6 +19,7 @@ from .checkers import (
     check_especies_no_banco,
     check_esforco,
     check_pontos,
+    check_resultados_vs_esforco,
     check_referencias_cruzadas,
 )
 from .reader import read_sheets
@@ -55,6 +56,7 @@ def validate_importacao_file(
     # --- Etapa 2: Validações de dados ---
     check_pontos(report.df_pontos, report)
     check_esforco(report.df_esforco, report)
+    check_resultados_vs_esforco(report.df_resultados, report.df_esforco, group, report)
     check_referencias_cruzadas(report.df_resultados, report.df_pontos, report)
 
     # --- Etapa 3: Validações que dependem do banco ---

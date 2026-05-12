@@ -84,23 +84,21 @@ def read_sheets(
         df_pontos = xls.parse("Pontos_e_Campanhas", dtype=str).dropna(how="all")
         df_esforco = xls.parse("Metadados_Esforco", dtype=str).dropna(how="all")
         
-        # Nome da aba de resultados depende do grupo
-        result_sheet = None
-        for sheet in xls.sheet_names:
-            if sheet.startswith("Resultados_"):
-                result_sheet = sheet
-                break
-        
-        if result_sheet is None:
+        # Nome da aba de resultados deve seguir o grupo selecionado.
+        result_sheet = expected_sheets[3]
+        if result_sheet not in available:
             report.issues.append(
                 ValidationIssue(
                     code="RESULTS_SHEET_NOT_FOUND",
                     severity="block",
-                    message=f"Nenhuma aba 'Resultados_*' encontrada.",
+                    message=(
+                        f"Aba de resultados esperada para o grupo '{group}' não encontrada: "
+                        f"'{result_sheet}'."
+                    ),
                 )
             )
             return False
-        
+
         df_resultados = xls.parse(result_sheet, dtype=str).dropna(how="all")
 
     except Exception as exc:
