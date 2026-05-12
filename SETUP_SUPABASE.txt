@@ -1,0 +1,62 @@
+CONFIGURAÇÃO DO AMBIENTE — OPYTA DATA
+======================================
+Data: 06/05/2026
+
+Oi! Vou te passar o que precisa para rodar o projeto aqui na sua máquina
+e conectar no mesmo Supabase que uso.
+
+
+1. RECEBA A PASTA DO PROJETO
+------------------------------
+Pega a pasta Opyta_Data comigo (Google Drive, zip ou Git).
+
+
+2. CRIE O ARQUIVO .env
+------------------------
+Na raiz da pasta (Opyta_Data/), cria um arquivo chamado exatamente ".env"
+com esse conteúdo — vou te mandar os valores reais separado:
+
+    SUPABASE_URL=https://SEU-PROJETO.supabase.co
+    SUPABASE_ANON_KEY=SUA_ANON_KEY_AQUI
+
+IMPORTANTE: Não sobe esse arquivo no Git. Nunca compartilhe publicamente.
+
+
+3. CRIE O AMBIENTE VIRTUAL E INSTALE AS DEPENDÊNCIAS
+------------------------------------------------------
+Abre o terminal do VS Code dentro da pasta Opyta_Data e roda:
+
+    python -m venv .venv
+    .venv\Scripts\Activate.ps1
+    pip install -r requirements.txt
+
+
+4. RODE O SISTEMA
+------------------
+    streamlit run app/main.py
+
+O sistema vai abrir no navegador em http://localhost:8501
+
+
+5. TESTE RÁPIDO DE CONEXÃO (opcional)
+---------------------------------------
+Cria um arquivo "teste.py" na raiz, roda uma vez e apaga em seguida:
+
+    from dotenv import load_dotenv
+    import os
+    from supabase import create_client
+
+    load_dotenv()
+    sb = create_client(os.getenv("SUPABASE_URL"), os.getenv("SUPABASE_ANON_KEY"))
+    print(sb.table("projetos").select("id_projeto, nome_projeto").limit(5).execute())
+
+Para rodar:
+    python teste.py
+
+Se aparecer uma lista de projetos, está tudo certo!
+
+
+RESUMO DO QUE VOU TE MANDAR SEPARADO (por mensagem segura)
+------------------------------------------------------------
+- SUPABASE_URL
+- SUPABASE_ANON_KEY
