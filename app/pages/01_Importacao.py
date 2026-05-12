@@ -34,6 +34,7 @@ from core.app_state import initialize_system_status, mark_stage_completed
 from core.ui.layout import (
     extract_alert_lines,
     inject_saas_styles,
+    render_action_buttons,
     render_alert_block,
     render_executive_summary,
     render_stepper,
