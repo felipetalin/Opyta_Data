@@ -23,6 +23,14 @@ NOME_TABELA_RESULTADOS = "resultados_ictiofauna"
 NOME_ABA_RESULTADOS = "Resultados_Ictiofauna"
 
 
+def _coerce_numeric(series: pd.Series) -> pd.Series:
+    """Converte valores numéricos vindos do Excel (inclui vírgula decimal) para float."""
+    return pd.to_numeric(
+        series.astype(str).str.replace(",", ".", regex=False).str.strip(),
+        errors="coerce",
+    )
+
+
 def limpar_dados_da_campanha(connection, id_projeto, df_pontos_da_planilha):
     """
     Limpa APENAS os dados de Ictiofauna das campanhas presentes na planilha.
@@ -119,6 +127,16 @@ def obter_mapas_de_ids(connection):
 
 
 def migrar_dados(connection, df_capa, df_pontos, df_esforco, df_resultados):
+    # Garante tipos numéricos antes das agregações (sum/mean) para evitar falha em dtype object.
+    if "Numero_de_Individuos" in df_resultados.columns:
+        df_resultados["Numero_de_Individuos"] = (
+            _coerce_numeric(df_resultados["Numero_de_Individuos"]).fillna(0)
+        )
+    if "CT_cm" in df_resultados.columns:
+        df_resultados["CT_cm"] = _coerce_numeric(df_resultados["CT_cm"])
+    if "PC_g" in df_resultados.columns:
+        df_resultados["PC_g"] = _coerce_numeric(df_resultados["PC_g"])
+
     especies_map, campanhas_map_inicial = obter_mapas_de_ids(connection)
 
     print("\n-> Processando Campanhas e Pontos de Coleta...")
