@@ -54,7 +54,7 @@ st.markdown(
 # =========================
 # QUERIES AUXILIARES
 # =========================
-@st.cache_data(show_spinner=False)
+@st.cache_data(show_spinner=False, ttl=120)
 def listar_projetos() -> list[str]:
     engine = get_engine()
     sql = """
@@ -68,7 +68,7 @@ def listar_projetos() -> list[str]:
     return df["nome_projeto"].astype(str).tolist()
 
 
-@st.cache_data(show_spinner=False)
+@st.cache_data(show_spinner=False, ttl=120)
 def listar_campanhas(projeto: str, grupo: str) -> list[str]:
     engine = get_engine()
     sql = """
@@ -84,7 +84,7 @@ def listar_campanhas(projeto: str, grupo: str) -> list[str]:
     return df["nome_campanha"].astype(str).tolist()
 
 
-@st.cache_data(show_spinner=False)
+@st.cache_data(show_spinner=False, ttl=120)
 def carregar_df_base(projeto: str, grupo: str) -> pd.DataFrame:
     engine = get_engine()
     query = """
@@ -118,6 +118,11 @@ with config_tab:
 
         with left:
             st.markdown("**Dados**")
+            if st.button("Atualizar dados do banco", use_container_width=True):
+                st.cache_data.clear()
+                st.session_state.pop("analysis_results", None)
+                st.session_state["results_executed"] = False
+                st.rerun()
             busca_proj = st.text_input("Buscar projeto", value="").strip().lower()
             projetos = listar_projetos()
             if busca_proj:
