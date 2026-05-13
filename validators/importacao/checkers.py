@@ -76,6 +76,190 @@ def check_pontos(df_pontos: pd.DataFrame, report: ValidationReport) -> None:
             )
 
 
+def _to_float(value: object) -> float | None:
+    if pd.isna(value):
+        return None
+    text_value = str(value).strip().replace(",", ".")
+    if not text_value:
+        return None
+    try:
+        return float(text_value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _col(df: pd.DataFrame, *names: str) -> str | None:
+    if df is None or df.empty:
+        return None
+    cols_norm = {c: _norm_text(c) for c in df.columns}
+    for wanted in names:
+        wanted_norm = _norm_text(wanted)
+        for col, norm_col in cols_norm.items():
+            if norm_col == wanted_norm:
+                return col
+    return None
+
+
+def check_pontos_conflitantes_no_banco(
+    df_capa: pd.DataFrame,
+    df_pontos: pd.DataFrame,
+    engine: Engine,
+    report: ValidationReport,
+) -> None:
+    """
+    Impede que passe planilha com mesmo (campanha+ponto) e coordenadas divergentes
+    de um ponto já existente no banco.
+    """
+    if df_capa is None or df_capa.empty or df_pontos is None or df_pontos.empty:
+        return
+
+    codigo_col = _col(df_capa, "Codigo_Opyta")
+    camp_col = _find_column(df_pontos, [("campanha",)])
+    ponto_col = _find_column(df_pontos, [("ponto",)])
+    lat_col = _find_column(df_pontos, [("latitude",), ("lat",)])
+    lon_col = _find_column(df_pontos, [("longitude",), ("lon",)])
+
+    missing = [
+        name
+        for name, col in [
+            ("Codigo_Opyta", codigo_col),
+            ("Campanha", camp_col),
+            ("Ponto", ponto_col),
+            ("Latitude", lat_col),
+            ("Longitude", lon_col),
+        ]
+        if col is None
+    ]
+    if missing:
+        report.issues.append(
+            ValidationIssue(
+                code="MISSING_POINT_CONFLICT_COLUMNS",
+                severity="warning",
+                message=(
+                    "Não foi possível validar conflito espacial de pontos; "
+                    f"colunas ausentes: {missing}."
+                ),
+            )
+        )
+        return
+
+    codigo_opyta = _norm_text(df_capa.iloc[0].get(codigo_col))
+    if not codigo_opyta:
+        report.issues.append(
+            ValidationIssue(
+                code="EMPTY_PROJECT_CODE",
+                severity="block",
+                message="Codigo_Opyta vazio na Capa_Projeto.",
+            )
+        )
+        return
+
+    try:
+        with engine.connect() as conn:
+            id_projeto = conn.execute(
+                text(
+                    """
+                    SELECT id_projeto
+                    FROM projetos
+                    WHERE LOWER(TRIM(REPLACE(codigo_interno_opyta, CHR(160), ''))) =
+                          LOWER(TRIM(REPLACE(:codigo, CHR(160), '')))
+                    """
+                ),
+                {"codigo": codigo_opyta},
+            ).scalar()
+
+            if not id_projeto:
+                report.issues.append(
+                    ValidationIssue(
+                        code="PROJECT_NOT_FOUND",
+                        severity="warning",
+                        message=(
+                            f"Projeto com Codigo_Opyta '{codigo_opyta}' não encontrado no banco; "
+                            "validação de conflito de pontos foi pulada."
+                        ),
+                    )
+                )
+                return
+
+            existing_rows = conn.execute(
+                text(
+                    """
+                    SELECT
+                        c.nome_campanha,
+                        pc.nome_ponto,
+                        pc.latitude,
+                        pc.longitude
+                    FROM pontos_coleta pc
+                    JOIN campanhas c ON c.id_campanha = pc.id_campanha
+                    WHERE pc.id_projeto = :id_projeto
+                    """
+                ),
+                {"id_projeto": id_projeto},
+            ).fetchall()
+    except Exception as exc:
+        report.issues.append(
+            ValidationIssue(
+                code="DB_POINT_CONFLICT_CHECK_ERROR",
+                severity="warning",
+                message=(
+                    "Erro ao validar conflito de pontos no banco: "
+                    f"{exc}."
+                ),
+            )
+        )
+        return
+
+    existing_map: dict[tuple[str, str], tuple[float | None, float | None]] = {}
+    for camp, ponto, lat, lon in existing_rows:
+        existing_map[(_norm_text(camp), _norm_text(ponto))] = (
+            _to_float(lat),
+            _to_float(lon),
+        )
+
+    divergence_lines: list[int] = []
+    examples: list[str] = []
+    eps = 1e-6
+
+    for idx, row in df_pontos.iterrows():
+        camp = _norm_text(row.get(camp_col))
+        ponto = _norm_text(row.get(ponto_col))
+        if not camp or not ponto:
+            continue
+
+        lat_new = _to_float(row.get(lat_col))
+        lon_new = _to_float(row.get(lon_col))
+        key = (camp, ponto)
+        if key not in existing_map:
+            continue
+
+        lat_old, lon_old = existing_map[key]
+        if lat_old is None or lon_old is None or lat_new is None or lon_new is None:
+            continue
+
+        if abs(lat_old - lat_new) > eps or abs(lon_old - lon_new) > eps:
+            divergence_lines.append(idx + 2)
+            if len(examples) < 5:
+                examples.append(
+                    f"{row.get(camp_col)} / {row.get(ponto_col)} "
+                    f"(banco: {lat_old}, {lon_old}; planilha: {lat_new}, {lon_new})"
+                )
+
+    if divergence_lines:
+        report.issues.append(
+            ValidationIssue(
+                code="POINT_COORDINATE_DIVERGENCE",
+                severity="block",
+                message=(
+                    f"{len(divergence_lines)} ponto(s) com mesmo nome/campanha já existem no banco "
+                    "com coordenadas diferentes. Crie novo nome de ponto (ex.: sufixo -CXX-01) "
+                    "ou ajuste a planilha. Exemplos: "
+                    + " ; ".join(examples)
+                ),
+                lines=divergence_lines[:10],
+            )
+        )
+
+
 def check_especies_no_banco(
     df_resultados: pd.DataFrame,
     engine: Engine,

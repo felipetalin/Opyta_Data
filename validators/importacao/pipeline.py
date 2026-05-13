@@ -18,6 +18,7 @@ from sqlalchemy.engine import Engine
 from .checkers import (
     check_especies_no_banco,
     check_esforco,
+    check_pontos_conflitantes_no_banco,
     check_pontos,
     check_resultados_vs_esforco,
     check_referencias_cruzadas,
@@ -61,6 +62,7 @@ def validate_importacao_file(
 
     # --- Etapa 3: Validações que dependem do banco ---
     if engine is not None:
+        check_pontos_conflitantes_no_banco(report.df_capa, report.df_pontos, engine, report)
         check_especies_no_banco(report.df_resultados, engine, report)
 
     return report

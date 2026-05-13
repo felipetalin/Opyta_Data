@@ -169,7 +169,62 @@ def obter_mapas_de_ids(connection):
     return especies_map, campanhas_map
 
 
-def migrar_dados(connection, df_capa, df_pontos, df_esforco, df_resultados, tabela_resultados: str):
+def obter_observacoes_existentes(
+    connection, id_projeto: int, tabela_resultados: str
+) -> dict:
+    """
+    Salva as observações manuais antes da limpeza da campanha, indexadas por
+    chave natural (campanha, ponto, metodo, id_especie).
+    Permite restaurá-las após a reinserção dos resultados.
+    """
+    try:
+        rows = connection.execute(
+            text(f"""
+                SELECT
+                    c.nome_campanha,
+                    pc.nome_ponto,
+                    ea.metodo_de_captura,
+                    rm.id_especie,
+                    rm.observacoes
+                FROM {tabela_resultados} rm
+                JOIN esforcos_amostragem ea ON rm.id_esforco = ea.id_esforco
+                JOIN pontos_coleta pc ON ea.id_ponto_coleta = pc.id_ponto_coleta
+                JOIN campanhas c ON pc.id_campanha = c.id_campanha
+                WHERE pc.id_projeto = :id_proj
+                  AND ea.grupo_biologico = :grupo
+                  AND rm.observacoes IS NOT NULL
+                  AND TRIM(rm.observacoes) != ''
+            """),
+            {"id_proj": id_projeto, "grupo": GRUPO_BIOLOGICO_ALVO},
+        ).fetchall()
+        obs_map = {
+            (
+                str(row[0]).strip(),
+                str(row[1]).strip(),
+                str(row[2]).strip(),
+                int(row[3]),
+            ): row[4]
+            for row in rows
+        }
+        if obs_map:
+            logger.info(
+                f"Preservadas {len(obs_map)} observação(ões) manual(is) antes da limpeza."
+            )
+        return obs_map
+    except Exception as exc:
+        logger.warning(f"Não foi possível preservar observações: {exc}")
+        return {}
+
+
+def migrar_dados(
+    connection,
+    df_capa,
+    df_pontos,
+    df_esforco,
+    df_resultados,
+    tabela_resultados: str,
+    obs_map: dict | None = None,
+):
     colunas_obrigatorias_pontos = ["Campanha", "Ponto"]
     for coluna in colunas_obrigatorias_pontos:
         if coluna not in df_pontos.columns:
@@ -268,7 +323,40 @@ def migrar_dados(connection, df_capa, df_pontos, df_esforco, df_resultados, tabe
             }
         )
 
-    if pontos_records:
+    # Carrega pontos já existentes no banco (com ou sem id_empreendimento)
+    # para evitar criar duplicatas quando o ponto já existe com empreendimento preenchido.
+    pontos_existentes_keys: set[tuple] = set()
+    try:
+        rows_exist = connection.execute(
+            text(
+                """
+                SELECT ca.nome_campanha, pc.nome_ponto
+                FROM pontos_coleta pc
+                JOIN campanhas ca ON pc.id_campanha = ca.id_campanha
+                WHERE pc.id_projeto = :id_projeto
+                """
+            ),
+            {"id_projeto": id_projeto},
+        ).fetchall()
+        pontos_existentes_keys = {
+            (str(r[0]).strip(), str(r[1]).strip()) for r in rows_exist
+        }
+        logger.info(
+            f"{len(pontos_existentes_keys)} ponto(s) já existem no banco — serão ignorados."
+        )
+    except Exception as exc:
+        logger.warning(f"Não foi possível verificar pontos existentes: {exc}")
+
+    id_to_campanha = {v: k for k, v in campanhas_map_atualizado.items()}
+    pontos_novos = [
+        rec
+        for rec in pontos_records
+        if (id_to_campanha.get(rec["id_campanha"]), rec["nome_ponto"])
+        not in pontos_existentes_keys
+    ]
+
+    if pontos_novos:
+        logger.info(f"Inserindo {len(pontos_novos)} novo(s) ponto(s) de coleta.")
         query_pontos = text(
             """
             INSERT INTO pontos_coleta (
@@ -284,7 +372,9 @@ def migrar_dados(connection, df_capa, df_pontos, df_esforco, df_resultados, tabe
             DO NOTHING
             """
         )
-        connection.execute(query_pontos, pontos_records)
+        connection.execute(query_pontos, pontos_novos)
+    elif pontos_records:
+        logger.info("Todos os pontos já existem no banco — nenhuma inserção necessária.")
 
     logger.info("Pontos de coleta inseridos/verificados.")
 
@@ -471,8 +561,8 @@ def migrar_dados(connection, df_capa, df_pontos, df_esforco, df_resultados, tabe
             ON CONFLICT (id_esforco, id_especie)
             DO UPDATE SET
                 numero_de_individuos = EXCLUDED.numero_de_individuos,
-                tipo_amostragem = EXCLUDED.tipo_amostragem,
-                observacoes = EXCLUDED.observacoes
+                tipo_amostragem = EXCLUDED.tipo_amostragem
+                -- observacoes preservadas intencionalmente (não sobrescrever dados manuais)
         """)
         connection.execute(query_resultados, resultados_records)
 
@@ -484,6 +574,33 @@ def migrar_dados(connection, df_capa, df_pontos, df_esforco, df_resultados, tabe
     )
 
     logger.info(f"{len(resultados_records)} registros de resultados inseridos/atualizados.")
+
+    # Restaurar observações manuais preservadas antes da limpeza
+    if obs_map:
+        obs_updates = []
+        for (campanha, ponto, metodo, id_especie), observacao in obs_map.items():
+            id_esforco = esforcos_db_map.get((campanha, ponto, metodo))
+            if id_esforco:
+                obs_updates.append(
+                    {
+                        "id_esforco": id_esforco,
+                        "id_especie": id_especie,
+                        "observacoes": observacao,
+                    }
+                )
+        if obs_updates:
+            connection.execute(
+                text(f"""
+                    UPDATE {tabela_resultados}
+                    SET observacoes = :observacoes
+                    WHERE id_esforco = :id_esforco
+                      AND id_especie = :id_especie
+                """),
+                obs_updates,
+            )
+            logger.info(
+                f"Restauradas {len(obs_updates)} observação(ões) manual(is)."
+            )
 
     if warnings_especies:
         logger.warning(
@@ -564,8 +681,19 @@ def main():
                 params_projeto,
             ).scalar_one()
 
+            obs_map = obter_observacoes_existentes(
+                connection, id_projeto, NOME_TABELA_RESULTADOS
+            )
             limpar_dados_da_campanha(connection, id_projeto, df_pontos, NOME_TABELA_RESULTADOS)
-            migrar_dados(connection, df_capa, df_pontos, df_esforco, df_resultados, NOME_TABELA_RESULTADOS)
+            migrar_dados(
+                connection,
+                df_capa,
+                df_pontos,
+                df_esforco,
+                df_resultados,
+                NOME_TABELA_RESULTADOS,
+                obs_map=obs_map,
+            )
 
             logger.info(f"âœ“ MIGRAÃ‡ÃƒO DE {GRUPO_BIOLOGICO_ALVO.upper()} CONCLUÃDA COM SUCESSO")
 

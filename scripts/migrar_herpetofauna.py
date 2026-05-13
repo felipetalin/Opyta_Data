@@ -268,7 +268,32 @@ def migrar_dados(connection, df_capa, df_pontos, df_esforco, df_resultados, tabe
             }
         )
 
-    if pontos_records:
+    # Pré-filtro: ignorar pontos já existentes (com ou sem id_empreendimento)
+    _pontos_existentes: set = set()
+    try:
+        _rows_exist = connection.execute(
+            text(
+                """
+                SELECT ca.nome_campanha, pc.nome_ponto
+                FROM pontos_coleta pc
+                JOIN campanhas ca ON pc.id_campanha = ca.id_campanha
+                WHERE pc.id_projeto = :id_projeto
+                """
+            ),
+            {"id_projeto": id_projeto},
+        ).fetchall()
+        _pontos_existentes = {(str(r[0]).strip(), str(r[1]).strip()) for r in _rows_exist}
+    except Exception:
+        pass  # Se falhar, ON CONFLICT atua como fallback
+
+    _id_to_campanha = {v: k for k, v in campanhas_map_atualizado.items()}
+    pontos_novos = [
+        rec
+        for rec in pontos_records
+        if (_id_to_campanha.get(rec["id_campanha"]), rec["nome_ponto"]) not in _pontos_existentes
+    ]
+
+    if pontos_novos:
         query_pontos = text(
             """
             INSERT INTO pontos_coleta (
@@ -284,7 +309,7 @@ def migrar_dados(connection, df_capa, df_pontos, df_esforco, df_resultados, tabe
             DO NOTHING
             """
         )
-        connection.execute(query_pontos, pontos_records)
+        connection.execute(query_pontos, pontos_novos)
 
     logger.info("Pontos de coleta inseridos/verificados.")
 
