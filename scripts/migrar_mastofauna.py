@@ -229,6 +229,128 @@ def obter_observacoes_existentes(
         return {}
 
 
+def atualizar_especies_da_planilha(connection, df_especies: pd.DataFrame | None):
+    """Atualiza cadastro de espécies a partir da aba `Especies` da planilha de campo."""
+    if df_especies is None or df_especies.empty:
+        logger.info("Aba 'Especies' ausente ou vazia. Cadastro de espécies não será atualizado.")
+        return
+
+    logger.info("Atualizando cadastro de espécies com dados ecológicos da aba 'Especies'...")
+
+    rename_map = {
+        "Nome_Cientifico": "nome_cientifico",
+        "Nome_Popular": "nome_popular",
+        "Grupo_Biologico": "grupo_biologico",
+        "Reino": "reino",
+        "Filo": "filo",
+        "Classe": "classe",
+        "Ordem": "ordem",
+        "Familia": "familia",
+        "Genero": "genero",
+        "Autor_e_Ano": "autor_e_ano",
+        "Status_IUCN": "status_ameaca_global",
+        "Status_MMA": "status_ameaca_nacional",
+        "Status_COPAM": "status_copam",
+        "Status_Copam": "status_copam",
+        "Status_Estadual": "status_estadual",
+        "CITES": "cites",
+        "Cites": "cites",
+        "Habito_Alimentar": "habito_alimentar",
+        "Guilda_Alimentar": "guilda_alimentar",
+        "Dependencia_Florestal": "dependencia_florestal",
+        "Endemismo": "endemismo",
+        "Sensibilidade_Ambiental": "sensibilidade_ambiental",
+        "Migratorio": "migratorio",
+        "Raridade": "raridade",
+        "Observacoes": "observacoes",
+    }
+
+    expected_cols = [
+        "nome_cientifico",
+        "nome_popular",
+        "grupo_biologico",
+        "reino",
+        "filo",
+        "classe",
+        "ordem",
+        "familia",
+        "genero",
+        "autor_e_ano",
+        "status_ameaca_nacional",
+        "status_ameaca_global",
+        "status_copam",
+        "status_estadual",
+        "cites",
+        "habito_alimentar",
+        "guilda_alimentar",
+        "dependencia_florestal",
+        "endemismo",
+        "sensibilidade_ambiental",
+        "migratorio",
+        "raridade",
+        "observacoes",
+    ]
+
+    df = df_especies.rename(columns=rename_map).copy()
+    for col in expected_cols:
+        if col not in df.columns:
+            df[col] = None
+
+    df = df[expected_cols]
+    for col in df.columns:
+        df[col] = df[col].apply(normalizar_texto)
+
+    df = df[df["nome_cientifico"].notna()].copy()
+    if df.empty:
+        logger.info("Nenhuma espécie válida encontrada para atualização.")
+        return
+
+    records = df.to_dict("records")
+
+    cols_db = pd.read_sql(
+        text(
+            """
+            SELECT column_name
+            FROM information_schema.columns
+            WHERE table_schema = 'public'
+              AND table_name = 'especies'
+            """
+        ),
+        connection,
+    )["column_name"].tolist()
+    cols_db_set = set(cols_db)
+    available_cols = [c for c in expected_cols if c in cols_db_set]
+
+    rows = [{k: rec.get(k) for k in available_cols} for rec in records]
+    if not rows or "nome_cientifico" not in available_cols:
+        logger.warning("Não foi possível atualizar espécies: colunas mínimas indisponíveis.")
+        return
+
+    insert_cols_sql = ",\n                ".join(available_cols)
+    values_cols_sql = ", ".join(f":{c}" for c in available_cols)
+    update_cols = [c for c in available_cols if c != "nome_cientifico"]
+    update_sql = ",\n                ".join(f"{c} = EXCLUDED.{c}" for c in update_cols)
+
+    connection.execute(
+        text(
+            f"""
+            INSERT INTO especies (
+                {insert_cols_sql}
+            )
+            VALUES (
+                {values_cols_sql}
+            )
+            ON CONFLICT (nome_cientifico)
+            DO UPDATE SET
+                {update_sql}
+            """
+        ),
+        rows,
+    )
+
+    logger.info("Cadastro de espécies atualizado com %s registro(s) da planilha.", len(rows))
+
+
 def migrar_dados(
     connection,
     df_capa,
@@ -237,6 +359,7 @@ def migrar_dados(
     df_resultados,
     tabela_resultados: str,
     obs_map: dict | None = None,
+    df_especies: pd.DataFrame | None = None,
 ):
     colunas_obrigatorias_pontos = ["Campanha", "Ponto"]
     for coluna in colunas_obrigatorias_pontos:
@@ -268,6 +391,7 @@ def migrar_dados(
 
     logger.info("Colunas obrigatÃ³rias validadas em todas as abas.")
 
+    atualizar_especies_da_planilha(connection, df_especies)
     especies_map, campanhas_map_inicial = obter_mapas_de_ids(connection)
 
     logger.info("Processando Campanhas e Pontos de Coleta...")
@@ -778,6 +902,11 @@ def main():
         df_capa = pd.read_excel(xls, "Capa_Projeto")
         df_pontos = pd.read_excel(xls, "Pontos_e_Campanhas").dropna(how="all")
         df_esforco = pd.read_excel(xls, "Metadados_Esforco").dropna(how="all")
+        df_especies = (
+            pd.read_excel(xls, "Especies").dropna(how="all")
+            if "Especies" in xls.sheet_names
+            else None
+        )
         df_resultados = pd.read_excel(xls, NOME_ABA_RESULTADOS).dropna(how="all")
 
         logger.info(f"Excel carregado: {len(df_pontos)} pontos, {len(df_resultados)} resultados")
@@ -836,6 +965,7 @@ def main():
                 df_resultados,
                 NOME_TABELA_RESULTADOS,
                 obs_map=obs_map,
+                df_especies=df_especies,
             )
 
             logger.info(f"âœ“ MIGRAÃ‡ÃƒO DE {GRUPO_BIOLOGICO_ALVO.upper()} CONCLUÃDA COM SUCESSO")
