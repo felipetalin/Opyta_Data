@@ -31,6 +31,8 @@ def validate_importacao_file(
     source: str | Path | BytesIO,
     group: str,
     engine: Engine | None = None,
+    allowed_species: set[str] | None = None,
+    strict_unknown_species: bool = False,
 ) -> ValidationReport:
     """
     Executa o pipeline completo de validação para arquivo de importação.
@@ -63,6 +65,12 @@ def validate_importacao_file(
     # --- Etapa 3: Validações que dependem do banco ---
     if engine is not None:
         check_pontos_conflitantes_no_banco(report.df_capa, report.df_pontos, engine, report)
-        check_especies_no_banco(report.df_resultados, engine, report)
+        check_especies_no_banco(
+            report.df_resultados,
+            engine,
+            report,
+            allowed_species=allowed_species,
+            strict_unknown_species=strict_unknown_species,
+        )
 
     return report

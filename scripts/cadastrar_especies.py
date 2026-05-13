@@ -17,6 +17,7 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from core.engine import get_engine
+from validators.especies.pipeline import validate_especies_file
 
 # --- CONFIGURAÇÕES ---
 ARQUIVO_EXCEL_ESPECIES = "cadastro_especies_opyta.xlsx"
@@ -65,6 +66,24 @@ def explain_error(exc: Exception) -> tuple[str, str]:
         "Falha durante leitura da planilha ou gravação no banco.",
         "Confira o log completo e valide formato das abas/colunas e conectividade com banco.",
     )
+
+
+def _report_validation(report, title: str) -> bool:
+    print(f"\n-> {title}")
+    if report.blocks:
+        print(f"  Bloqueios: {len(report.blocks)}")
+        for issue in report.blocks[:10]:
+            print(f"  - [{issue.code}] {issue.message}")
+        return False
+
+    if report.warnings:
+        print(f"  Avisos: {len(report.warnings)}")
+        for issue in report.warnings[:5]:
+            print(f"  - [{issue.code}] {issue.message}")
+    else:
+        print("  Sem bloqueios.")
+
+    return True
 
 
 def cadastrar_dicionarios(connection, df_bacias, df_biomas):
@@ -385,7 +404,13 @@ def main():
         log_progress(15, "Lendo arquivo Excel")
         xls = pd.ExcelFile(ARQUIVO_EXCEL_ESPECIES)
 
-        df_especies = pd.read_excel(xls, "Especies").dropna(how="all")
+        log_progress(25, "Validando aba Especies")
+        species_report = validate_especies_file(ARQUIVO_EXCEL_ESPECIES, engine)
+        if not _report_validation(species_report, "Validação da aba Especies"):
+            sys.exit(1)
+
+        df_especies = species_report.cleaned_df if species_report.cleaned_df is not None else pd.read_excel(xls, "Especies").dropna(how="all")
+
         df_bacias = pd.read_excel(xls, "Bacias_Hidrograficas").dropna(how="all") if "Bacias_Hidrograficas" in xls.sheet_names else None
         df_biomas = pd.read_excel(xls, "Biomas").dropna(how="all") if "Biomas" in xls.sheet_names else None
         df_endemismo = pd.read_excel(xls, "Endemismo").dropna(how="all") if "Endemismo" in xls.sheet_names else None

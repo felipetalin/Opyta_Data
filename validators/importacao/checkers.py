@@ -264,10 +264,12 @@ def check_especies_no_banco(
     df_resultados: pd.DataFrame,
     engine: Engine,
     report: ValidationReport,
+    allowed_species: set[str] | None = None,
+    strict_unknown_species: bool = False,
 ) -> None:
     """
     Compara especies nos resultados com o banco de dados.
-    Registra quais não foram encontradas (warning, não bloqueia).
+    Registra quais não foram encontradas. Em modo estrito, bloqueia a migração.
     """
     if df_resultados is None or df_resultados.empty:
         return
@@ -308,25 +310,37 @@ def check_especies_no_banco(
         return
 
     # Comparar
+    allowed_species_norm = {
+        _norm_text(species) for species in (allowed_species or set()) if _norm_text(species)
+    }
     unknown = set()
+    unknown_lines: list[int] = []
     for idx, value in df_resultados[species_col].items():
         if pd.isna(value) or not isinstance(value, str) or value.strip() == "":
             continue
-        value_norm = value.strip().lower()
-        if value_norm not in db_species:
+        value_norm = _norm_text(value)
+        if value_norm not in db_species and value_norm not in allowed_species_norm:
             unknown.add(value.strip())
+            unknown_lines.append(idx + 2)
 
     if unknown:
         report.total_especies_desconhecidas = len(unknown)
         report.especies_desconhecidas = sorted(unknown)[:50]  # Top 50
+        severity = "block" if strict_unknown_species else "info"
         report.issues.append(
             ValidationIssue(
                 code="UNKNOWN_SPECIES",
-                severity="info",
+                severity=severity,
                 message=(
                     f"Total de {len(unknown)} espécie(s) desconhecida(s) nos resultados. "
-                    f"Serão cadastradas automaticamente ou necessitarem revisão."
+                    + (
+                        "Bloqueio ativado: revise o cadastro mestre ou confirme que as espécies "
+                        "estão presentes na aba 'Especies' da mesma planilha."
+                        if strict_unknown_species
+                        else "Serão cadastradas automaticamente ou necessitarão revisão."
+                    )
                 ),
+                lines=unknown_lines[:10] if unknown_lines else [],
             )
         )
 

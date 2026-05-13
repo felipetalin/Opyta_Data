@@ -22,6 +22,8 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from core.engine import get_engine
+from validators.especies.pipeline import validate_especies_file
+from validators.importacao.pipeline import validate_importacao_file
 
 # --- CONFIGURAÃ‡Ã•ES ---
 ARQUIVO_EXCEL = sys.argv[1] if len(sys.argv) > 1 else "projeto_mastofauna_real.xlsx"
@@ -33,6 +35,7 @@ ABAS_OBRIGATORIAS = [
     "Capa_Projeto",
     "Pontos_e_Campanhas",
     "Metadados_Esforco",
+    "Especies",
     NOME_ABA_RESULTADOS,
 ]
 
@@ -83,6 +86,20 @@ def normalizar_data(valor):
         return dt.tz_localize(None)
     except Exception:
         return None
+
+
+def reportar_validacao(titulo: str, report) -> bool:
+    logger.info(
+        "%s: %s bloqueio(s), %s aviso(s).",
+        titulo,
+        len(report.blocks),
+        len(report.warnings),
+    )
+    for issue in report.blocks[:10]:
+        logger.error("%s [%s] %s", titulo, issue.code, issue.message)
+    for issue in report.warnings[:5]:
+        logger.warning("%s [%s] %s", titulo, issue.code, issue.message)
+    return not report.blocks
 
 
 def limpar_dados_da_campanha(connection, id_projeto, df_pontos_da_planilha, tabela_resultados: str):
@@ -911,6 +928,31 @@ def main():
 
         logger.info(f"Excel carregado: {len(df_pontos)} pontos, {len(df_resultados)} resultados")
 
+        species_report = validate_especies_file(ARQUIVO_EXCEL, engine)
+        if not reportar_validacao("Validação de cadastro de espécies", species_report):
+            sys.exit(1)
+
+        if species_report.cleaned_df is not None:
+            df_especies = species_report.cleaned_df
+
+        allowed_species = set()
+        if species_report.cleaned_df is not None and "Nome_Cientifico" in species_report.cleaned_df.columns:
+            allowed_species = {
+                str(value).strip().lower()
+                for value in species_report.cleaned_df["Nome_Cientifico"].dropna().tolist()
+                if str(value).strip()
+            }
+
+        import_report = validate_importacao_file(
+            ARQUIVO_EXCEL,
+            GRUPO_BIOLOGICO_ALVO,
+            engine,
+            allowed_species=allowed_species,
+            strict_unknown_species=True,
+        )
+        if not reportar_validacao("Validação de resultados", import_report):
+            sys.exit(1)
+
         if "Data" in df_pontos.columns:
             df_pontos["Data"] = df_pontos["Data"].apply(normalizar_data)
 
@@ -953,9 +995,7 @@ def main():
                 params_projeto,
             ).scalar_one()
 
-            obs_map = obter_observacoes_existentes(
-                connection, id_projeto, NOME_TABELA_RESULTADOS
-            )
+            obs_map = obter_observacoes_existentes(connection, id_projeto, NOME_TABELA_RESULTADOS)
             limpar_dados_da_campanha(connection, id_projeto, df_pontos, NOME_TABELA_RESULTADOS)
             migrar_dados(
                 connection,

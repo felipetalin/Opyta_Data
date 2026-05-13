@@ -30,6 +30,8 @@ KNOWN_COLUMNS = {
     "Familia",
     "Genero",
     "Autor_e_Ano",
+    "Status_IUCN",
+    "Status_MMA",
     "Status_Ameaca_Nacional",
     "Status_Ameaca_Global",
     "Origem",
@@ -42,7 +44,9 @@ KNOWN_COLUMNS = {
     "Status_Estadual",
     "Status_Ameaca_Estadual",  # alias aceito → mapeado para Status_Estadual
     "Status_Copam",
+    "Status_COPAM",
     "Cites",
+    "CITES",
     "Guilda_Alimentar",
     "Dependencia_Florestal",
     "Endemismo",
@@ -61,6 +65,14 @@ _COLUMN_ALIASES: dict[str, str] = {
     # Status estadual: aceita nome completo com ameaca
     "Status_Ameaca_Estadual": "Status_Estadual",
     "status_ameaca_estadual": "Status_Estadual",
+    "Status_IUCN": "Status_Ameaca_Global",
+    "status_iucn": "Status_Ameaca_Global",
+    "Status_MMA": "Status_Ameaca_Nacional",
+    "status_mma": "Status_Ameaca_Nacional",
+    "Status_COPAM": "Status_Copam",
+    "status_copam": "Status_Copam",
+    "CITES": "Cites",
+    "cites": "Cites",
 }
 
 

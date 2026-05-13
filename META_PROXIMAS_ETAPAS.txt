@@ -50,3 +50,9 @@ Sequencia recomendada
 1. Primeiro: distribuir modelo oficial e treinar cultura de cuidado com dados.
 2. Depois: medir queda de erros de validacao e retrabalho por ciclo de importacao.
 3. Em seguida: evoluir para digitacao direta no sistema com menor risco de adesao.
+
+Aprendizado operacional
+
+1. A validacao da planilha de cadastro de especies precisa rodar antes da migracao para o banco.
+2. A validacao de resultados deve bloquear especies desconhecidas, salvo quando elas estiverem presentes na aba 'Especies' da mesma planilha.
+3. Observacoes manuais precisam ser capturadas antes da limpeza e restauradas no reinsert.
