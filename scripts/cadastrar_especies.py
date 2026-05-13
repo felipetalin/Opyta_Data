@@ -126,6 +126,9 @@ def cadastrar_especies_principal(connection, df_especies):
         "Familia": "familia",
         "Genero": "genero",
         "Autor_e_Ano": "autor_e_ano",
+        # Aliases usados em planilhas de cadastro geral.
+        "Status_IUCN": "status_ameaca_global",
+        "Status_MMA": "status_ameaca_nacional",
         "Status_Ameaca_Nacional": "status_ameaca_nacional",
         "Status_Ameaca_Global": "status_ameaca_global",
         "Origem": "origem",
@@ -142,7 +145,9 @@ def cadastrar_especies_principal(connection, df_especies):
         "Status_Estadual": "status_estadual",
         "Status_Ameaca_Estadual": "status_estadual",
         "Status_Copam": "status_copam",
+        "Status_COPAM": "status_copam",
         "Cites": "cites",
+        "CITES": "cites",
         "Guilda_Alimentar": "guilda_alimentar",
         "Dependencia_Florestal": "dependencia_florestal",
         "Endemismo": "endemismo",
@@ -201,6 +206,29 @@ def cadastrar_especies_principal(connection, df_especies):
                 record[key] = None
             elif isinstance(value, str):
                 record[key] = value.strip()
+
+    # Remove identificacoes genericas (sp./spp.) que violam a constraint do banco.
+    def _is_generic_name(name: str | None) -> bool:
+        if not name:
+            return False
+        txt = str(name).strip().lower()
+        return (
+            " spp." in txt
+            or txt.endswith(" spp")
+            or " sp." in txt
+            or txt.endswith(" sp")
+        )
+
+    total_before_filter = len(records_to_insert)
+    records_to_insert = [
+        rec for rec in records_to_insert if not _is_generic_name(rec.get("nome_cientifico"))
+    ]
+    skipped_generic = total_before_filter - len(records_to_insert)
+    if skipped_generic > 0:
+        print(
+            "  Aviso: "
+            f"{skipped_generic} registro(s) com nome cientifico generico (sp./spp.) foram ignorados."
+        )
 
     if records_to_insert:
         cols_db = pd.read_sql(

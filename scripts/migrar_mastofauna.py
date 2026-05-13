@@ -50,8 +50,15 @@ def validar_abas_excel(xls: pd.ExcelFile, abas_obrigatorias: list[str]) -> None:
 def normalizar_texto(valor):
     if pd.isna(valor):
         return None
-    valor = str(valor).strip()
+    valor = str(valor).replace("\ufeff", "").strip()
+    # Colapsa quebras de linha e espaços duplicados para padronizar chaves de mapeamento.
+    valor = " ".join(valor.split())
     return valor if valor else None
+
+
+def normalizar_chave(valor):
+    txt = normalizar_texto(valor)
+    return txt.lower() if txt else None
 
 
 def normalizar_grupo(valor):
@@ -151,7 +158,13 @@ def obter_mapas_de_ids(connection):
             text("SELECT id_especie, nome_cientifico FROM especies"),
             connection,
         )
-        .assign(nome_cientifico=lambda df: df["nome_cientifico"].astype(str).str.strip())
+        .assign(
+            nome_cientifico=lambda df: df["nome_cientifico"]
+            .astype(str)
+            .str.replace("\ufeff", "", regex=False)
+            .str.strip()
+            .str.lower()
+        )
         .set_index("nome_cientifico")["id_especie"]
         .to_dict()
     )
@@ -393,23 +406,29 @@ def migrar_dados(
             params={"id_projeto": id_projeto},
         )
         .assign(
-            nome_campanha=lambda df: df["nome_campanha"].astype(str).str.strip(),
-            nome_ponto=lambda df: df["nome_ponto"].astype(str).str.strip(),
+            nome_campanha=lambda df: df["nome_campanha"].apply(normalizar_chave),
+            nome_ponto=lambda df: df["nome_ponto"].apply(normalizar_chave),
         )
         .set_index(["nome_campanha", "nome_ponto"])["id_ponto_coleta"]
         .to_dict()
     )
 
     esforcos_records = []
-    df_esforco_filtrado = df_esforco[
-        df_esforco["Grupo_Biologico"].apply(normalizar_grupo)
-        == normalizar_grupo(GRUPO_BIOLOGICO_ALVO)
-    ].copy()
+    grupo_alvo = normalizar_grupo(GRUPO_BIOLOGICO_ALVO)
+    if grupo_alvo == "mastofauna":
+        grupos_aceitos = {"mastofauna", "primatas", "primates", "primatologia"}
+        df_esforco_filtrado = df_esforco[
+            df_esforco["Grupo_Biologico"].apply(normalizar_grupo).isin(grupos_aceitos)
+        ].copy()
+    else:
+        df_esforco_filtrado = df_esforco[
+            df_esforco["Grupo_Biologico"].apply(normalizar_grupo) == grupo_alvo
+        ].copy()
 
     for _, row in df_esforco_filtrado.iterrows():
-        campanha = normalizar_texto(row.get("Campanha"))
-        ponto = normalizar_texto(row.get("Ponto"))
-        metodo = normalizar_texto(row.get("Metodo_de_Captura"))
+        campanha = normalizar_chave(row.get("Campanha"))
+        ponto = normalizar_chave(row.get("Ponto"))
+        metodo = normalizar_chave(row.get("Metodo_de_Captura"))
 
         if not campanha or not ponto or not metodo:
             continue
@@ -478,19 +497,21 @@ def migrar_dados(
             },
         )
         .assign(
-            nome_campanha=lambda df: df["nome_campanha"].astype(str).str.strip(),
-            nome_ponto=lambda df: df["nome_ponto"].astype(str).str.strip(),
-            metodo_de_captura=lambda df: df["metodo_de_captura"].astype(str).str.strip(),
+            nome_campanha=lambda df: df["nome_campanha"].apply(normalizar_chave),
+            nome_ponto=lambda df: df["nome_ponto"].apply(normalizar_chave),
+            metodo_de_captura=lambda df: df["metodo_de_captura"].apply(normalizar_chave),
         )
         .set_index(["nome_campanha", "nome_ponto", "metodo_de_captura"])["id_esforco"]
         .to_dict()
     )
 
     df_resultados = df_resultados.copy()
-    df_resultados["Campanha"] = df_resultados["Campanha"].apply(normalizar_texto)
-    df_resultados["Ponto"] = df_resultados["Ponto"].apply(normalizar_texto)
-    df_resultados["Metodo_de_Captura"] = df_resultados["Metodo_de_Captura"].apply(normalizar_texto)
-    df_resultados["Nome_Cientifico"] = df_resultados["Nome_Cientifico"].apply(normalizar_texto)
+    df_resultados["Campanha"] = df_resultados["Campanha"].apply(normalizar_chave)
+    df_resultados["Ponto"] = df_resultados["Ponto"].apply(normalizar_chave)
+    df_resultados["Metodo_de_Captura"] = df_resultados["Metodo_de_Captura"].apply(normalizar_chave)
+    df_resultados["Nome_Cientifico"] = (
+        df_resultados["Nome_Cientifico"].apply(normalizar_texto).str.lower()
+    )
     df_resultados["Tipo_de_Amostragem"] = df_resultados["Tipo_de_Amostragem"].apply(normalizar_texto)
     df_resultados["Numero_de_Individuos"] = pd.to_numeric(
         df_resultados["Numero_de_Individuos"], errors="coerce"
@@ -511,9 +532,104 @@ def migrar_dados(
         len(df_resultados_agregado),
     )
 
+    # Fallback: cria esforço a partir dos resultados quando a combinação
+    # campanha+ponto+metodo existir na planilha e não existir no banco.
+    chaves_resultados = set(
+        zip(
+            df_resultados_agregado["Campanha"],
+            df_resultados_agregado["Ponto"],
+            df_resultados_agregado["Metodo_de_Captura"],
+        )
+    )
+    chaves_faltantes = [k for k in chaves_resultados if k not in esforcos_db_map]
+    esforcos_fallback = []
+    for campanha, ponto, metodo in chaves_faltantes:
+        id_ponto = pontos_db_map.get((campanha, ponto))
+        if not id_ponto or not metodo:
+            continue
+
+        tipo_candidates = (
+            df_resultados_agregado[
+                (df_resultados_agregado["Campanha"] == campanha)
+                & (df_resultados_agregado["Ponto"] == ponto)
+                & (df_resultados_agregado["Metodo_de_Captura"] == metodo)
+            ]["Tipo_de_Amostragem"]
+            .dropna()
+            .tolist()
+        )
+        tipo_fallback = normalizar_texto(tipo_candidates[0]) if tipo_candidates else None
+
+        esforcos_fallback.append(
+            {
+                "id_ponto_coleta": id_ponto,
+                "grupo_biologico": GRUPO_BIOLOGICO_ALVO,
+                "metodo_de_captura": metodo,
+                "esforco": None,
+                "unidade_esforco": None,
+                "tipo_amostragem": tipo_fallback,
+            }
+        )
+
+    if esforcos_fallback:
+        connection.execute(
+            text(
+                """
+                INSERT INTO esforcos_amostragem (
+                    id_ponto_coleta, grupo_biologico, metodo_de_captura,
+                    esforco, unidade_esforco, tipo_amostragem
+                )
+                VALUES (
+                    :id_ponto_coleta, :grupo_biologico, :metodo_de_captura,
+                    :esforco, :unidade_esforco, :tipo_amostragem
+                )
+                ON CONFLICT (id_ponto_coleta, grupo_biologico, metodo_de_captura)
+                DO UPDATE SET
+                    tipo_amostragem = COALESCE(esforcos_amostragem.tipo_amostragem, EXCLUDED.tipo_amostragem)
+                """
+            ),
+            esforcos_fallback,
+        )
+        logger.info(
+            "Criados/atualizados %s esforço(s) via fallback de resultados.",
+            len(esforcos_fallback),
+        )
+
+        # Recarrega o mapa de esforços após fallback.
+        esforcos_db_map = (
+            pd.read_sql(
+                text(
+                    """
+                    SELECT
+                        e.id_esforco,
+                        c.nome_campanha,
+                        p.nome_ponto,
+                        e.metodo_de_captura
+                    FROM esforcos_amostragem e
+                    JOIN pontos_coleta p ON e.id_ponto_coleta = p.id_ponto_coleta
+                    JOIN campanhas c ON p.id_campanha = c.id_campanha
+                    WHERE p.id_projeto = :id_projeto
+                      AND e.grupo_biologico = :grupo
+                    """
+                ),
+                connection,
+                params={
+                    "id_projeto": id_projeto,
+                    "grupo": GRUPO_BIOLOGICO_ALVO,
+                },
+            )
+            .assign(
+                nome_campanha=lambda df: df["nome_campanha"].apply(normalizar_chave),
+                nome_ponto=lambda df: df["nome_ponto"].apply(normalizar_chave),
+                metodo_de_captura=lambda df: df["metodo_de_captura"].apply(normalizar_chave),
+            )
+            .set_index(["nome_campanha", "nome_ponto", "metodo_de_captura"])["id_esforco"]
+            .to_dict()
+        )
+
     resultados_records = []
     warnings_especies = set()
     warnings_esforcos = 0
+    warnings_detalhe = []
 
     for _, row in df_resultados_agregado.iterrows():
         campanha = normalizar_texto(row.get("Campanha"))
@@ -545,8 +661,26 @@ def migrar_dados(
             )
         elif not id_especie:
             warnings_especies.add(nome_cientifico_clean)
+            warnings_detalhe.append(
+                {
+                    "campanha": campanha,
+                    "ponto": ponto,
+                    "metodo": metodo,
+                    "especie": nome_cientifico_clean,
+                    "motivo": "especie_nao_cadastrada",
+                }
+            )
         else:
             warnings_esforcos += 1
+            warnings_detalhe.append(
+                {
+                    "campanha": campanha,
+                    "ponto": ponto,
+                    "metodo": metodo,
+                    "especie": nome_cientifico_clean,
+                    "motivo": "esforco_nao_mapeado",
+                }
+            )
 
     if resultados_records:
         query_resultados = text(f"""
@@ -613,6 +747,15 @@ def migrar_dados(
             f"{warnings_esforcos} linha(s) de resultado nÃ£o puderam ser "
             "mapeadas para esforÃ§o/ponto/mÃ©todo."
         )
+        for item in warnings_detalhe[:20]:
+            logger.warning(
+                "Nao mapeado -> campanha='%s' | ponto='%s' | metodo='%s' | especie='%s' | motivo='%s'",
+                item["campanha"],
+                item["ponto"],
+                item["metodo"],
+                item["especie"],
+                item["motivo"],
+            )
 
 
 def main():
