@@ -1,6 +1,6 @@
 # Opyta Data Deployment Checklist
 
-> 🎯 **REGRA DE OURO:** Após fazer commit local, **SEMPRE** faça `git push origin deploy-cloud` IMEDIATAMENTE. Caso contrário, a versão web não verá as mudanças mesmo que o local esteja correto.
+> 🎯 **REGRA DE OURO:** `git commit` sozinho **não faz deploy**. Após o commit local, **SEMPRE** faça `git push origin deploy-cloud` IMEDIATAMENTE. É esse push que atualiza a versão web hospedada.
 
 ## O Erro Comum (Que Sempre Acontece)
 
@@ -21,7 +21,7 @@ Se o commit mais recente está apenas no primeiro comando, **não foi pushado**.
 git push origin deploy-cloud
 ```
 
-Depois disso, o deploy automaticamente puxa as mudanças.
+Depois disso, a plataforma de deploy do Streamlit passa a observar o novo commit em `deploy-cloud` e atualizar a aplicação.
 
 ---
 
@@ -94,7 +94,7 @@ Se qualquer uma dessas etapas falhar, o problema não é reboot nem cache, e sim
    ```
    Se o bloco novo não aparecer aqui, ele ainda não entrou no commit real.
 
-6. Verifique se o deploy usa o branch correto (`deploy-cloud`).
+6. Verifique se o deploy usa o branch correto (`deploy-cloud`) e não outro branch de trabalho.
 
 7. Reinicie o servidor/serviço web após o deploy.
 
