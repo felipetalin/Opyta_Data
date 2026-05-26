@@ -6,6 +6,7 @@ import sys
 from pathlib import Path
 import os
 import re
+import unicodedata
 
 import numpy as np
 import pandas as pd
@@ -20,7 +21,7 @@ from core.engine import get_engine
 from validators.especies.pipeline import validate_especies_file
 
 # --- CONFIGURAÇÕES ---
-ARQUIVO_EXCEL_ESPECIES = "cadastro_especies_opyta.xlsx"
+ARQUIVO_EXCEL_ESPECIES = sys.argv[1] if len(sys.argv) > 1 else "cadastro_especies_opyta.xlsx"
 
 
 def log_progress(percent: int, etapa: str):
@@ -84,6 +85,21 @@ def _report_validation(report, title: str) -> bool:
         print("  Sem bloqueios.")
 
     return True
+
+
+def _to_bool_or_none(value):
+    if pd.isna(value):
+        return None
+    if isinstance(value, bool):
+        return value
+    txt = unicodedata.normalize("NFKD", str(value).strip().lower())
+    txt = "".join(ch for ch in txt if not unicodedata.combining(ch))
+    txt = re.sub(r"\s+", " ", txt)
+    if txt in {"sim", "s", "yes", "y", "true", "1", "x"}:
+        return True
+    if txt in {"nao", "n", "no", "false", "0", ""}:
+        return False
+    return None
 
 
 def cadastrar_dicionarios(connection, df_bacias, df_biomas):
@@ -154,6 +170,11 @@ def cadastrar_especies_principal(connection, df_especies):
         "Habito_Alimentar": "habito_alimentar",
         "Estrategia_Reprodutiva": "estrategia_reprodutiva",
         "Valor_Economico": "valor_economico",
+        "Cinegetica": "cinegetica",
+        "Cinegéticas": "cinegetica",
+        "Cinegeticas": "cinegetica",
+        "Xerimbabo": "xerimbabo",
+        "Xerimbabos": "xerimbabo",
         "Observacoes": "observacoes",
         "BMWP_Score": "bmwp_score",
     }
@@ -195,6 +216,8 @@ def cadastrar_especies_principal(connection, df_especies):
         "habito_alimentar",
         "estrategia_reprodutiva",
         "valor_economico",
+        "cinegetica",
+        "xerimbabo",
         "observacoes",
         "bmwp_score",
         "status_estadual",
@@ -215,7 +238,10 @@ def cadastrar_especies_principal(connection, df_especies):
     # Remove colunas extras da planilha para evitar binds inesperados.
     df_renamed = df_renamed[expected_db_cols]
 
-    df_renamed.replace(["N.A.", "n.a.", "NA"], np.nan, inplace=True)
+    df_renamed = df_renamed.mask(df_renamed.isin(["N.A.", "n.a.", "NA"]), np.nan)
+    for bool_col in ["cinegetica", "xerimbabo"]:
+        if bool_col in df_renamed.columns:
+            df_renamed[bool_col] = df_renamed[bool_col].map(_to_bool_or_none)
 
     records_to_insert = df_renamed.to_dict("records")
 
@@ -413,7 +439,8 @@ def main():
 
         df_bacias = pd.read_excel(xls, "Bacias_Hidrograficas").dropna(how="all") if "Bacias_Hidrograficas" in xls.sheet_names else None
         df_biomas = pd.read_excel(xls, "Biomas").dropna(how="all") if "Biomas" in xls.sheet_names else None
-        df_endemismo = pd.read_excel(xls, "Endemismo").dropna(how="all") if "Endemismo" in xls.sheet_names else None
+        _aba_endemismo = next((n for n in xls.sheet_names if n.lower().startswith("endemismo")), None)
+        df_endemismo = pd.read_excel(xls, _aba_endemismo).dropna(how="all") if _aba_endemismo else None
 
         with engine.begin() as connection:
             log_progress(35, "Cadastrando dicionários (bacias/biomas)")

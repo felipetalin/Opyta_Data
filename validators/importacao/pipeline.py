@@ -13,6 +13,7 @@ from __future__ import annotations
 from io import BytesIO
 from pathlib import Path
 
+import pandas as pd
 from sqlalchemy.engine import Engine
 
 from .checkers import (
@@ -24,7 +25,73 @@ from .checkers import (
     check_referencias_cruzadas,
 )
 from .reader import read_sheets
-from .report import ValidationReport
+from .report import ValidationIssue, ValidationReport
+from ..especies.pipeline import validate_especies_file
+
+
+def _validate_embedded_species_catalog(
+    report: ValidationReport,
+    engine: Engine | None,
+) -> set[str]:
+    """Valida Cadastro_Especies/Especies e retorna especies aceitas no arquivo."""
+    df_species = getattr(report, "df_cadastro_especies", None)
+    if df_species is None or getattr(df_species, "empty", True):
+        return set()
+
+    bio = BytesIO()
+    with pd.ExcelWriter(bio, engine="openpyxl") as writer:
+        df_species.to_excel(writer, sheet_name="Especies", index=False)
+    bio.seek(0)
+
+    species_report = validate_especies_file(bio, engine=engine)
+    report.total_cadastro_especies = species_report.total_rows
+    report.total_cadastro_especies_novas = species_report.total_new
+    report.total_cadastro_especies_existentes = species_report.total_existing
+
+    for issue in species_report.blocks:
+        report.issues.append(
+            ValidationIssue(
+                code=f"CADASTRO_ESPECIES_{issue.code}",
+                severity="block",
+                message=f"Cadastro_Especies: {issue.message}",
+                lines=[issue.row] if issue.row is not None else [],
+            )
+        )
+
+    for issue in species_report.warnings:
+        report.issues.append(
+            ValidationIssue(
+                code=f"CADASTRO_ESPECIES_{issue.code}",
+                severity="warning",
+                message=f"Cadastro_Especies: {issue.message}",
+                lines=[issue.row] if issue.row is not None else [],
+            )
+        )
+
+    report.issues.append(
+        ValidationIssue(
+            code="CADASTRO_ESPECIES_VALIDADO",
+            severity="info",
+            message=(
+                "Cadastro_Especies validado: "
+                f"{species_report.total_rows} linha(s), "
+                f"{species_report.total_new} nova(s), "
+                f"{species_report.total_existing} ja existente(s)."
+            ),
+        )
+    )
+
+    if not species_report.can_proceed:
+        return set()
+
+    df_clean = species_report.cleaned_df
+    if df_clean is None or "Nome_Cientifico" not in df_clean.columns:
+        return set()
+    return {
+        str(value).strip()
+        for value in df_clean["Nome_Cientifico"].dropna().tolist()
+        if str(value).strip()
+    }
 
 
 def validate_importacao_file(
@@ -57,6 +124,7 @@ def validate_importacao_file(
         return report
 
     # --- Etapa 2: Validações de dados ---
+    embedded_allowed_species = _validate_embedded_species_catalog(report, engine)
     check_pontos(report.df_pontos, report)
     check_esforco(report.df_esforco, report)
     check_resultados_vs_esforco(report.df_resultados, report.df_esforco, group, report)
@@ -69,7 +137,7 @@ def validate_importacao_file(
             report.df_resultados,
             engine,
             report,
-            allowed_species=allowed_species,
+            allowed_species=set(allowed_species or set()) | embedded_allowed_species,
             strict_unknown_species=strict_unknown_species,
         )
 

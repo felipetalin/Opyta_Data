@@ -100,6 +100,14 @@ def read_sheets(
             return False
 
         df_resultados = xls.parse(result_sheet, dtype=str).dropna(how="all")
+        species_sheet = "Cadastro_Especies" if "Cadastro_Especies" in available else None
+        if species_sheet is None and "Especies" in available:
+            species_sheet = "Especies"
+        df_cadastro_especies = (
+            xls.parse(species_sheet, dtype=str).dropna(how="all")
+            if species_sheet
+            else None
+        )
 
     except Exception as exc:
         report.issues.append(
@@ -147,10 +155,14 @@ def read_sheets(
     report.df_pontos = df_pontos
     report.df_esforco = df_esforco
     report.df_resultados = df_resultados
+    report.df_cadastro_especies = df_cadastro_especies
 
     # 6. Contar registros
     report.total_campanhas = len(df_pontos["Campanha"].unique()) if "Campanha" in df_pontos else 0
     report.total_pontos = len(df_pontos) if "Ponto" in df_pontos else 0
     report.total_registros = len(df_resultados)
+    report.total_cadastro_especies = (
+        len(df_cadastro_especies) if df_cadastro_especies is not None else 0
+    )
 
     return True

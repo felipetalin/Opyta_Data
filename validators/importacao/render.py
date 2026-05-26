@@ -102,7 +102,13 @@ def _render_summary_cards(report: ValidationReport) -> None:
             "status": "ok" if report.total_registros > 0 else "warn",
         },
         {
-            "label": "Esforço total",
+            "label": "Cadastro spp.",
+            "value": str(report.total_cadastro_especies),
+            "hint": "Especies na aba Cadastro_Especies/Especies",
+            "status": "ok" if report.total_cadastro_especies > 0 else "info",
+        },
+        {
+            "label": "Esforco total",
             "value": f"{report.total_esforco_dias:.1f}d",
             "hint": "Dias de amostragem",
             "status": "info",

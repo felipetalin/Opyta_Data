@@ -24,7 +24,7 @@ IMPORT_TEMPLATE_SPECS: dict[str, dict[str, object]] = {
 }
 
 MASTER_SPECIES_SHEETS: dict[str, list[str]] = {
-    "Especies": ["Nome_Cientifico", "Nome_Popular", "Grupo_Biologico", "Reino", "Filo", "Classe", "Ordem", "Familia", "Genero", "Autor_e_Ano", "Status_Ameaca_Nacional", "Status_Ameaca_Global", "Origem", "Habito_Alimentar", "Estrategia_Reprodutiva", "Valor_Economico", "Observacoes", "BMWP_Score", "Status_Estadual", "Status_Copam", "Cites", "Guilda_Alimentar", "Dependencia_Florestal", "Endemismo", "Sensibilidade_Ambiental", "Migratorio", "Raridade"],
+    "Especies": ["Nome_Cientifico", "Nome_Popular", "Grupo_Biologico", "Reino", "Filo", "Classe", "Ordem", "Familia", "Genero", "Autor_e_Ano", "Status_Ameaca_Nacional", "Status_Ameaca_Global", "Origem", "Habito_Alimentar", "Estrategia_Reprodutiva", "Valor_Economico", "Cinegetica", "Xerimbabo", "Observacoes", "BMWP_Score", "Status_Estadual", "Status_Copam", "Cites", "Guilda_Alimentar", "Dependencia_Florestal", "Endemismo", "Sensibilidade_Ambiental", "Migratorio", "Raridade"],
     "Bacias_Hidrograficas": ["Nome_Bacia"],
     "Biomas": ["Nome_Bioma"],
     "Endemismo": ["Nome_Cientifico", "Tipo_de_Regiao", "Nome_da_Regiao"],

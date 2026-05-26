@@ -629,6 +629,7 @@ if btn_validate:
                     BytesIO(Path(cleaned_path).read_bytes()),
                     group=grupo,
                     engine=engine,
+                    strict_unknown_species=True,
                 )
             finally:
                 if engine is not None:

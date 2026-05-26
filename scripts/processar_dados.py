@@ -111,6 +111,8 @@ def processar_e_consolidar(engine):
             esf.esforco,
             esf.unidade_esforco,
             res.tipo_amostragem,
+            pts.id_empreendimento,
+            emp.nome AS nome_empreendimento,
             sp.nome_cientifico,
             sp.nome_popular,
             sp.reino,
@@ -136,7 +138,9 @@ def processar_e_consolidar(engine):
         JOIN clientes cli
             ON proj.id_cliente = cli.id_cliente
         JOIN especies sp
-            ON res.id_especie = sp.id_especie;
+            ON res.id_especie = sp.id_especie
+        LEFT JOIN empreendimentos emp
+            ON pts.id_empreendimento = emp.id_empreendimento;
     """)
 
     print("   -> Lendo e processando dados de todas as tabelas...")
@@ -153,6 +157,10 @@ def processar_e_consolidar(engine):
             text("""
                 ALTER TABLE biota_analise_consolidada
                 ADD COLUMN IF NOT EXISTS tipo_amostragem VARCHAR(50);
+                ALTER TABLE biota_analise_consolidada
+                ADD COLUMN IF NOT EXISTS id_empreendimento INTEGER;
+                ALTER TABLE biota_analise_consolidada
+                ADD COLUMN IF NOT EXISTS nome_empreendimento VARCHAR(255);
             """)
         )
 

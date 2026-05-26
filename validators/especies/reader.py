@@ -7,6 +7,8 @@ from __future__ import annotations
 
 from io import BytesIO
 from pathlib import Path
+import re
+import unicodedata
 
 import pandas as pd
 
@@ -14,6 +16,7 @@ from .report import ValidationIssue, ValidationReport
 
 # Nome exato da aba esperada (case-sensitive)
 SHEET_NAME = "Especies"
+SHEET_ALIASES = ("Especies", "Cadastro_Especies")
 
 # Colunas mínimas que devem existir para o processo continuar
 REQUIRED_COLUMNS = {"Nome_Cientifico", "Grupo_Biologico"}
@@ -38,6 +41,8 @@ KNOWN_COLUMNS = {
     "Habito_Alimentar",
     "Estrategia_Reprodutiva",
     "Valor_Economico",
+    "Cinegetica",
+    "Xerimbabo",
     "Observacoes",
     "BMWP_Score",
     # Colunas opcionais de fauna terrestre (migration 002)
@@ -75,6 +80,27 @@ _COLUMN_ALIASES: dict[str, str] = {
     "cites": "Cites",
 }
 
+_COLUMN_ALIASES_BY_KEY: dict[str, str] = {
+    "bmwp_score": "BMWP_Score",
+    "bmwp": "BMWP_Score",
+    "status_ameaca_estadual": "Status_Estadual",
+    "status_iucn": "Status_Ameaca_Global",
+    "status_mma": "Status_Ameaca_Nacional",
+    "status_copam": "Status_Copam",
+    "cites": "Cites",
+    "cinegetica": "Cinegetica",
+    "cinegeticas": "Cinegetica",
+    "xerimbabo": "Xerimbabo",
+    "xerimbabos": "Xerimbabo",
+}
+
+
+def _column_key(value: object) -> str:
+    text = unicodedata.normalize("NFKD", str(value or ""))
+    text = "".join(ch for ch in text if not unicodedata.combining(ch))
+    text = text.strip().lower()
+    return re.sub(r"[^a-z0-9]+", "_", text).strip("_")
+
 
 def read_sheet(
     source: str | Path | BytesIO,
@@ -103,23 +129,32 @@ def read_sheet(
         return None
 
     # 2. Verificar presença da aba
-    if SHEET_NAME not in xls.sheet_names:
+    sheet_name = next((name for name in SHEET_ALIASES if name in xls.sheet_names), None)
+    if sheet_name is None:
         available = ", ".join(xls.sheet_names) or "(nenhuma)"
         report.issues.append(
             ValidationIssue(
                 code="SHEET_NOT_FOUND",
                 severity="block",
                 message=(
-                    f"Aba '{SHEET_NAME}' não encontrada. "
+                    f"Aba '{SHEET_NAME}' ou 'Cadastro_Especies' não encontrada. "
                     f"Abas disponíveis: {available}."
                 ),
             )
         )
         return None
+    if sheet_name != SHEET_NAME:
+        report.issues.append(
+            ValidationIssue(
+                code="SHEET_ALIAS_NORMALIZED",
+                severity="info",
+                message=f"Aba '{sheet_name}' reconhecida como '{SHEET_NAME}'.",
+            )
+        )
 
     # 3. Ler a aba
     try:
-        df = xls.parse(SHEET_NAME, dtype=str)
+        df = xls.parse(sheet_name, dtype=str)
     except Exception as exc:
         report.issues.append(
             ValidationIssue(
@@ -135,9 +170,10 @@ def read_sheet(
 
     # 4b. Normalizar aliases de colunas para nomes canônicos
     alias_map = {
-        col: _COLUMN_ALIASES[col]
+        col: _COLUMN_ALIASES.get(col) or _COLUMN_ALIASES_BY_KEY.get(_column_key(col))
         for col in df.columns
-        if col in _COLUMN_ALIASES and col != _COLUMN_ALIASES[col]
+        if (_COLUMN_ALIASES.get(col) or _COLUMN_ALIASES_BY_KEY.get(_column_key(col)))
+        and col != (_COLUMN_ALIASES.get(col) or _COLUMN_ALIASES_BY_KEY.get(_column_key(col)))
     }
     if alias_map:
         df = df.rename(columns=alias_map)

@@ -3,8 +3,10 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 import os
+import re
 import traceback
 import logging
+import unicodedata
 
 import pandas as pd
 from sqlalchemy import text
@@ -55,6 +57,15 @@ def normalizar_texto(valor):
         return None
     valor = str(valor).strip()
     return valor if valor else None
+
+
+def normalizar_chave_texto(valor):
+    texto = normalizar_texto(valor)
+    if texto is None:
+        return None
+    texto = texto.replace("\u00A0", " ")
+    texto = unicodedata.normalize("NFKC", texto)
+    return re.sub(r"\s+", " ", texto).strip().casefold()
 
 
 def normalizar_grupo(valor):
@@ -341,8 +352,10 @@ def migrar_dados(connection, df_capa, df_pontos, df_esforco, df_resultados, tabe
         .assign(
             nome_campanha=lambda df: df["nome_campanha"].astype(str).str.strip(),
             nome_ponto=lambda df: df["nome_ponto"].astype(str).str.strip(),
+            nome_campanha_chave=lambda df: df["nome_campanha"].apply(normalizar_chave_texto),
+            nome_ponto_chave=lambda df: df["nome_ponto"].apply(normalizar_chave_texto),
         )
-        .set_index(["nome_campanha", "nome_ponto"])["id_ponto_coleta"]
+        .set_index(["nome_campanha_chave", "nome_ponto_chave"])["id_ponto_coleta"]
         .to_dict()
     )
 
@@ -360,7 +373,7 @@ def migrar_dados(connection, df_capa, df_pontos, df_esforco, df_resultados, tabe
         if not campanha or not ponto or not metodo:
             continue
 
-        chave_ponto = (campanha, ponto)
+        chave_ponto = (normalizar_chave_texto(campanha), normalizar_chave_texto(ponto))
         id_ponto = pontos_db_map.get(chave_ponto)
 
         if id_ponto:
@@ -427,8 +440,11 @@ def migrar_dados(connection, df_capa, df_pontos, df_esforco, df_resultados, tabe
             nome_campanha=lambda df: df["nome_campanha"].astype(str).str.strip(),
             nome_ponto=lambda df: df["nome_ponto"].astype(str).str.strip(),
             metodo_de_captura=lambda df: df["metodo_de_captura"].astype(str).str.strip(),
+            nome_campanha_chave=lambda df: df["nome_campanha"].apply(normalizar_chave_texto),
+            nome_ponto_chave=lambda df: df["nome_ponto"].apply(normalizar_chave_texto),
+            metodo_de_captura_chave=lambda df: df["metodo_de_captura"].apply(normalizar_chave_texto),
         )
-        .set_index(["nome_campanha", "nome_ponto", "metodo_de_captura"])["id_esforco"]
+        .set_index(["nome_campanha_chave", "nome_ponto_chave", "metodo_de_captura_chave"])["id_esforco"]
         .to_dict()
     )
 
@@ -491,7 +507,11 @@ def migrar_dados(connection, df_capa, df_pontos, df_esforco, df_resultados, tabe
             warnings_esforcos += 1
             continue
 
-        chave_esforco = (campanha, ponto, metodo)
+        chave_esforco = (
+            normalizar_chave_texto(campanha),
+            normalizar_chave_texto(ponto),
+            normalizar_chave_texto(metodo),
+        )
         id_esforco = esforcos_db_map.get(chave_esforco)
         id_especie = especies_map.get(nome_cientifico_clean)
 
