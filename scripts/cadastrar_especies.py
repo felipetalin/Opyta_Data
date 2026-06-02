@@ -252,27 +252,29 @@ def cadastrar_especies_principal(connection, df_especies):
             elif isinstance(value, str):
                 record[key] = value.strip()
 
-    # Remove identificacoes genericas (sp./spp.) que violam a constraint do banco.
-    def _is_generic_name(name: str | None) -> bool:
+    # A constraint atual do banco bloqueia apenas "spp." (plural).
+    # Unidades taxonomicas operacionais em "sp." sao validas para alguns grupos
+    # e precisam ser cadastraveis para vincular resultados de monitoramento.
+    def _violates_species_constraint(name: str | None) -> bool:
         if not name:
             return False
         txt = str(name).strip().lower()
         return (
             " spp." in txt
             or txt.endswith(" spp")
-            or " sp." in txt
-            or txt.endswith(" sp")
         )
 
     total_before_filter = len(records_to_insert)
     records_to_insert = [
-        rec for rec in records_to_insert if not _is_generic_name(rec.get("nome_cientifico"))
+        rec for rec in records_to_insert
+        if not _violates_species_constraint(rec.get("nome_cientifico"))
     ]
-    skipped_generic = total_before_filter - len(records_to_insert)
-    if skipped_generic > 0:
+    skipped_by_constraint = total_before_filter - len(records_to_insert)
+    if skipped_by_constraint > 0:
         print(
             "  Aviso: "
-            f"{skipped_generic} registro(s) com nome cientifico generico (sp./spp.) foram ignorados."
+            f"{skipped_by_constraint} registro(s) com 'spp.' foram ignorados "
+            "por restricao da tabela especies."
         )
 
     if records_to_insert:
