@@ -31,6 +31,10 @@ def _coerce_numeric(series: pd.Series) -> pd.Series:
     )
 
 
+def _none_if_nan(value):
+    return None if pd.isna(value) else value
+
+
 def limpar_dados_da_campanha(connection, id_projeto, df_pontos_da_planilha):
     """
     Limpa APENAS os dados de Ictiofauna das campanhas presentes na planilha.
@@ -136,6 +140,8 @@ def migrar_dados(connection, df_capa, df_pontos, df_esforco, df_resultados):
         df_resultados["CT_cm"] = _coerce_numeric(df_resultados["CT_cm"])
     if "PC_g" in df_resultados.columns:
         df_resultados["PC_g"] = _coerce_numeric(df_resultados["PC_g"])
+    if "Esforco" in df_esforco.columns:
+        df_esforco["Esforco"] = _coerce_numeric(df_esforco["Esforco"])
 
     especies_map, campanhas_map_inicial = obter_mapas_de_ids(connection)
 
@@ -278,9 +284,9 @@ def migrar_dados(connection, df_capa, df_pontos, df_esforco, df_resultados):
                     "id_ponto_coleta": id_ponto,
                     "grupo_biologico": GRUPO_BIOLOGICO_ALVO,
                     "metodo_de_captura": row["Metodo_de_Captura"],
-                    "esforco": row.get("Esforco"),
-                    "unidade_esforco": row.get("Unidade_Esforco"),
-                    "tipo_amostragem": row.get("Tipo_de_Amostragem"),
+                    "esforco": _none_if_nan(row.get("Esforco")),
+                    "unidade_esforco": _none_if_nan(row.get("Unidade_Esforco")),
+                    "tipo_amostragem": _none_if_nan(row.get("Tipo_de_Amostragem")),
                 }
             )
 
@@ -369,10 +375,10 @@ def migrar_dados(connection, df_capa, df_pontos, df_esforco, df_resultados):
                 {
                     "id_esforco": id_esforco,
                     "id_especie": id_especie,
-                    "numero_de_individuos": row.get("Numero_de_Individuos"),
-                    "ct_cm": row.get("CT_cm"),
-                    "pc_g": row.get("PC_g"),
-                    "tipo_amostragem": row.get("Tipo_de_Amostragem"),
+                    "numero_de_individuos": _none_if_nan(row.get("Numero_de_Individuos")),
+                    "ct_cm": _none_if_nan(row.get("CT_cm")),
+                    "pc_g": _none_if_nan(row.get("PC_g")),
+                    "tipo_amostragem": _none_if_nan(row.get("Tipo_de_Amostragem")),
                 }
             )
         elif not id_especie:

@@ -97,6 +97,7 @@ def processar_e_consolidar(engine):
             FROM resultados_mastofauna
         )
         SELECT
+            proj.id_projeto,
             cli.nome_empresa,
             proj.nome_projeto,
             proj.codigo_interno_opyta,
@@ -155,6 +156,8 @@ def processar_e_consolidar(engine):
     with engine.begin() as connection:
         connection.execute(
             text("""
+                ALTER TABLE biota_analise_consolidada
+                ADD COLUMN IF NOT EXISTS id_projeto INTEGER;
                 ALTER TABLE biota_analise_consolidada
                 ADD COLUMN IF NOT EXISTS tipo_amostragem VARCHAR(50);
                 ALTER TABLE biota_analise_consolidada
