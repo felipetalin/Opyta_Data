@@ -90,6 +90,12 @@ def render_sidebar():
         st.page_link("pages/6_Geoprocessamento.py", label="🗺️ Geoambiental")
 
         st.markdown(
+            "<div style='font-size:0.82rem; font-weight:700; color:#6a744f; margin:16px 0 8px 2px;'>QUALIDADE</div>",
+            unsafe_allow_html=True,
+        )
+        st.page_link("pages/05_Qualidade_Dados.py", label="🔎 Qualidade & Auditoria")
+
+        st.markdown(
             "<div style='font-size:0.82rem; font-weight:700; color:#6a744f; margin:16px 0 8px 2px;'>SAÍDA</div>",
             unsafe_allow_html=True,
         )
