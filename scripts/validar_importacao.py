@@ -15,6 +15,37 @@ if str(ROOT) not in sys.path:
 from core.engine import get_engine
 from validators.importacao.pipeline import validate_importacao_file
 
+try:
+    from core.audit import record_operation
+except Exception:  # auditoria é opcional; nunca deve quebrar a validação
+    record_operation = None
+
+
+def _registrar_auditoria(arquivo: str, grupo: str, report) -> None:
+    """Grava um registro de auditoria da validação (best-effort)."""
+    if record_operation is None:
+        return
+    try:
+        record_operation(
+            "validacao",
+            status="ok" if report.can_proceed else "bloqueado",
+            grupo=grupo,
+            source_files=[arquivo],
+            metrics={
+                "total_campanhas": report.total_campanhas,
+                "total_pontos": report.total_pontos,
+                "total_registros": report.total_registros,
+            },
+            issues={
+                "n_blocks": len(report.blocks),
+                "n_warnings": len(report.warnings),
+                "n_especies_desconhecidas": len(report.especies_desconhecidas),
+            },
+        )
+    except Exception:
+        # Auditoria nunca pode interromper o fluxo de validação.
+        pass
+
 
 def _sep(char: str = "-", width: int = 65) -> str:
     return char * width
@@ -95,9 +126,11 @@ def main() -> None:
     print(f"\n{_sep('=')}")
     if report.can_proceed:
         print("  VALIDACAO OK - arquivo aprovado para migracao")
+        _registrar_auditoria(arquivo, grupo, report)
         sys.exit(0)
 
     print("  VALIDACAO FALHOU - corrija os bloqueios antes de migrar")
+    _registrar_auditoria(arquivo, grupo, report)
     sys.exit(1)
 
 
