@@ -1,0 +1,98 @@
+LASTRO DE ATIVIDADES - OPYTA DATA
+Data: 2026-06-20
+Contexto: evolucao de validacao, cadastro, migracao, consolidacao e governanca de qualidade.
+
+1) RESUMO EXECUTIVO
+- Foi concluida a portabilidade de componentes de governanca do Opyta_Data_Analysis para o Opyta_Data.
+- Foi criada a nova aba de Qualidade & Auditoria e incorporada na sidebar curada.
+- Foi validado deploy em producao (branch deploy-cloud) com evidencias de commit e sincronizacao remota.
+
+2) PASSOS EXECUTADOS (ORDEM CRONOLOGICA)
+2.1 Diagnostico inicial
+- Confirmado que o app Streamlit estava ativo e com commits recentes.
+- Identificado gap do Bloco 5 (Qualidade/Auditoria) e ausencia de rastreabilidade operacional persistente.
+
+2.2 Portabilidade tecnica aplicada
+- Criado core/audit/ com:
+  - manifest.py: git_context, sha256_file, file_record, build_file_manifest, discover_deliverables, record_operation, load_audit_log.
+  - __init__.py: exportacoes do modulo.
+- Criado core/campanha.py:
+  - normalizacao de campanha para padrao C{NNN}-{YYYY}-{MM}-{SC|CH}.
+  - eliminacao de ambiguidade 28a vs 28a ordinal (Unicode), convergindo para formato canonico.
+- Criado validators/findings.py:
+  - modelo rico de achados (severidade, tipo_achado, status_revisao), resumo e checklist.
+- Preenchido validators/common_checks.py:
+  - checagens reutilizaveis (colunas obrigatorias, nulos, duplicidade, negativos).
+
+2.3 Nova pagina de produto (Bloco 5)
+- Criada app/pages/05_Qualidade_Dados.py com:
+  - KPIs operacionais (auditadas, ok, bloqueadas, erro).
+  - distribuicao por tipo e status.
+  - historico de lineage em tabela.
+  - empty-state orientativo quando nao ha registros.
+
+2.4 Integracao no fluxo atual
+- Atualizado scripts/validar_importacao.py:
+  - registra auditoria via record_operation("validacao", ...), modo best-effort, nao bloqueante.
+
+2.5 Navegacao e publicacao
+- Atualizado core/sidebar.py:
+  - inclusao da secao QUALIDADE e link para pages/05_Qualidade_Dados.py.
+- Adicionado marcador visual de versao/build na sidebar para diagnostico rapido de deploy.
+
+2.6 Validacoes realizadas
+- py_compile executado com sucesso nos arquivos alterados.
+- Push confirmado em origin/deploy-cloud com HEAD local igual ao remoto.
+- Rebuild validado em producao apos reboot manual; aba passou a aparecer.
+
+3) COMMITS DE REFERENCIA (LASTRO)
+- 3fe7edf - feat(qualidade): camada de auditoria/lineage, normalizacao de campanha e pagina Qualidade de Dados.
+- e49d9cc - feat(nav): adiciona link Qualidade & Auditoria na sidebar curada.
+- f2a3868 - chore(deploy): adiciona marcador de build visivel na sidebar.
+
+4) O QUE A ABA QUALIDADE ENTREGA HOJE
+- Painel de governanca e rastreabilidade do pipeline de dados.
+- Visao executiva de qualidade operacional (nao e aba de analise ecologica).
+- Evidencia de quando/como operacoes ocorreram e com qual versao de codigo.
+
+5) LIMITACOES ATUAIS
+- Fonte do log de auditoria atual: runtime/audit/*.json.
+- Em ambiente cloud, runtime local pode ser efemero (nao garante historico persistente apos reinicio).
+
+6) PLANEJAMENTO FUTURO (PRIORIZADO)
+P1 - Persistencia de auditoria em Supabase (prioridade alta)
+- Criar tabela audit_log no banco.
+- Adaptar record_operation para gravar no banco (mantendo fallback local).
+- Ajustar pagina 05 para ler prioritariamente do banco.
+Resultado esperado:
+- historico duravel, compartilhado e consultavel entre sessoes/deploys.
+
+P2 - Cobertura ponta a ponta das operacoes
+- Instrumentar scripts migrar_*.py e consolidacao para registrar auditoria.
+- Manter padrao de metrics/issues por operacao.
+Resultado esperado:
+- trilha completa: validacao -> migracao -> consolidacao.
+
+P3 - Normalizacao de campanha na origem
+- Aplicar core/campanha.py nos pontos de cadastro/migracao relevantes.
+- Opcional: modo estrito em etapas sensiveis para bloquear nome fora de padrao.
+Resultado esperado:
+- reducao de duplicidade de campanhas e consistencia temporal.
+
+P4 - Qualidade de dados avancada
+- Expandir checkers com regras por grupo biologico.
+- Expor alertas e tendencias de erro por projeto/grupo na aba 05.
+Resultado esperado:
+- prevencao ativa de retrabalho e melhoria continua da qualidade.
+
+P5 - Higiene de repositorio
+- Tratar refs quebradas relacionadas a desktop.ini no repositorio local sincronizado com Drive.
+Resultado esperado:
+- reduzir ruido operacional em comandos git.
+
+7) CRITERIO DE CONCLUSAO DA FASE ATUAL
+- Aba QUALIDADE visivel e funcional: OK.
+- Lastro tecnico e de deploy registrado: OK.
+- Plano futuro definido com prioridades: OK.
+
+Responsavel pelo registro: Copilot (GPT-5.3-Codex)
