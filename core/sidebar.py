@@ -46,6 +46,11 @@ def _clear_login_state() -> None:
     st.session_state.logged_user = None
     st.session_state.last_activity_utc = None
 
+
+def _current_build_label() -> str:
+    # Marcador visível para validar rapidamente se o deploy carregou o commit novo.
+    return os.getenv("OPYTA_BUILD_LABEL", "build e49d9cc")
+
 def render_sidebar():
     if _is_session_expired():
         _clear_login_state()
@@ -102,6 +107,8 @@ def render_sidebar():
         st.page_link("pages/04_Exportacao.py", label="📤 Exportação")
 
         st.divider()
+
+        st.caption(_current_build_label())
 
         if st.button("Sair", use_container_width=True):
             _clear_login_state()
