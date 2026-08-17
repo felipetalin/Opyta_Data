@@ -23,6 +23,13 @@ def _norm_text(value: object) -> str:
     return text_value
 
 
+def _campaign_code(value: object) -> str:
+    """Retorna o codigo operacional da campanha, ex.: C008-2013-08 -> c008."""
+    text_value = _norm_text(value)
+    match = re.match(r"^(c\d+)", text_value)
+    return match.group(1) if match else text_value
+
+
 def _find_column(df: pd.DataFrame, predicates: list[tuple[str, ...]]) -> str | None:
     """Procura uma coluna usando combinações de fragmentos no nome normalizado."""
     if df is None or df.empty:
@@ -34,6 +41,98 @@ def _find_column(df: pd.DataFrame, predicates: list[tuple[str, ...]]) -> str | N
             if all(token in norm_col for token in tokens):
                 return col
     return None
+
+
+def check_campaign_consistency(
+    df_pontos: pd.DataFrame,
+    df_esforco: pd.DataFrame,
+    df_resultados: pd.DataFrame,
+    report: ValidationReport,
+) -> None:
+    """Valida coerencia de campanhas entre abas usando codigo operacional C###."""
+    frames = {
+        "Pontos_e_Campanhas": df_pontos,
+        "Metadados_Esforco": df_esforco,
+        "Resultados": df_resultados,
+    }
+
+    campaign_sets: dict[str, set[str]] = {}
+    label_sets: dict[str, set[str]] = {}
+    missing_columns: list[str] = []
+
+    for name, df in frames.items():
+        camp_col = _find_column(df, [("campanha",)])
+        if df is None or df.empty or camp_col is None:
+            missing_columns.append(name)
+            continue
+
+        labels = {
+            _norm_text(value)
+            for value in df[camp_col].dropna().tolist()
+            if _norm_text(value)
+        }
+        label_sets[name] = labels
+        campaign_sets[name] = {_campaign_code(value) for value in labels}
+
+    if missing_columns:
+        report.issues.append(
+            ValidationIssue(
+                code="MISSING_CAMPAIGN_COLUMNS",
+                severity="block",
+                message=(
+                    "Nao foi possivel validar campanhas entre abas; "
+                    f"coluna Campanha ausente/vazia em: {missing_columns}."
+                ),
+            )
+        )
+        return
+
+    base_codes = campaign_sets["Pontos_e_Campanhas"]
+    for name in ("Metadados_Esforco", "Resultados"):
+        extra = sorted(campaign_sets[name] - base_codes)
+        missing = sorted(base_codes - campaign_sets[name])
+        if extra or missing:
+            report.issues.append(
+                ValidationIssue(
+                    code="CAMPAIGN_CODE_MISMATCH",
+                    severity="block",
+                    message=(
+                        f"{name}: campanhas C### divergentes de Pontos_e_Campanhas. "
+                        f"Extras: {extra or 'nenhuma'}; ausentes: {missing or 'nenhuma'}."
+                    ),
+                )
+            )
+
+    for name, labels in label_sets.items():
+        codes = {_campaign_code(value) for value in labels}
+        if len(labels) != len(codes):
+            report.issues.append(
+                ValidationIssue(
+                    code="CAMPAIGN_LABELS_COLLAPSE",
+                    severity="info",
+                    message=(
+                        f"{name}: {len(labels)} rotulo(s) de campanha equivalem a "
+                        f"{len(codes)} campanha(s) operacionais C###."
+                    ),
+                )
+            )
+
+    pontos_labels = label_sets["Pontos_e_Campanhas"]
+    for name in ("Metadados_Esforco", "Resultados"):
+        labels_not_in_points = sorted(label_sets[name] - pontos_labels)
+        if labels_not_in_points:
+            report.issues.append(
+                ValidationIssue(
+                    code="CAMPAIGN_LABEL_NOT_IN_POINTS",
+                    severity="block",
+                    message=(
+                        f"{name}: rotulos de campanha existem nesta aba, mas nao existem "
+                        "em Pontos_e_Campanhas: "
+                        + ", ".join(labels_not_in_points[:20])
+                        + (f" (+{len(labels_not_in_points) - 20})" if len(labels_not_in_points) > 20 else "")
+                    ),
+                )
+            )
 
 
 def check_pontos(df_pontos: pd.DataFrame, report: ValidationReport) -> None:
@@ -66,12 +165,13 @@ def check_pontos(df_pontos: pd.DataFrame, report: ValidationReport) -> None:
             report.issues.append(
                 ValidationIssue(
                     code="INVALID_COORDINATES",
-                    severity="warning",
+                    severity="block",
                     message=(
                         f"Coordenadas inválidas nas linhas: {invalid_coords[:5]}. "
                         f"Latitude deve estar em [-90, 90] e longitude em [-180, 180]."
                     ),
                     lines=invalid_coords[:10],
+                    sheet="pontos",
                 )
             )
 
@@ -98,6 +198,37 @@ def _col(df: pd.DataFrame, *names: str) -> str | None:
             if norm_col == wanted_norm:
                 return col
     return None
+
+
+_REQUIRED_SPECIES_DB_COLUMNS = [
+    "nome_cientifico",
+    "grupo_biologico",
+    "reino",
+    "filo",
+    "classe",
+    "ordem",
+    "familia",
+    "genero",
+    "status_ameaca_nacional",
+    "status_ameaca_global",
+    "origem",
+    "habito_alimentar",
+    "estrategia_reprodutiva",
+    "valor_economico",
+]
+
+_OPTIONAL_TRI_STATE_SPECIES_DB_COLUMNS = [
+    "cinegetica",
+    "xerimbabo",
+]
+
+
+def _is_blank_catalog_value(value: object) -> bool:
+    if pd.isna(value):
+        return True
+    if isinstance(value, str) and not value.strip():
+        return True
+    return False
 
 
 def check_pontos_conflitantes_no_banco(
@@ -256,6 +387,7 @@ def check_pontos_conflitantes_no_banco(
                     + " ; ".join(examples)
                 ),
                 lines=divergence_lines[:10],
+                sheet="pontos",
             )
         )
 
@@ -292,13 +424,76 @@ def check_especies_no_banco(
         )
         return
 
-    # Carrega especies do banco
+    # Carrega especies do banco e verifica se o cadastro mestre esta completo.
     try:
         with engine.connect() as conn:
+            existing_cols = {
+                row[0]
+                for row in conn.execute(
+                    text(
+                        """
+                        SELECT column_name
+                        FROM information_schema.columns
+                        WHERE table_schema = 'public'
+                          AND table_name = 'especies'
+                        """
+                    )
+                ).fetchall()
+            }
+            required_schema_cols = (
+                _REQUIRED_SPECIES_DB_COLUMNS
+                + _OPTIONAL_TRI_STATE_SPECIES_DB_COLUMNS
+            )
+            missing_db_cols = [col for col in required_schema_cols if col not in existing_cols]
+            if missing_db_cols:
+                report.issues.append(
+                    ValidationIssue(
+                        code="DB_SPECIES_SCHEMA_INCOMPLETE",
+                        severity="block",
+                        message=(
+                            "Nao foi possivel validar completude do cadastro mestre "
+                            "de especies; colunas ausentes no banco: "
+                            f"{missing_db_cols}."
+                        ),
+                    )
+                )
+                return
+
             rows = conn.execute(
-                text("SELECT LOWER(nome_cientifico) FROM especies")
-            ).fetchall()
-        db_species = {r[0] for r in rows}
+                text(
+                    """
+                    SELECT
+                        nome_cientifico,
+                        grupo_biologico,
+                        reino,
+                        filo,
+                        classe,
+                        ordem,
+                        familia,
+                        genero,
+                        status_ameaca_nacional,
+                        status_ameaca_global,
+                        origem,
+                        habito_alimentar,
+                        estrategia_reprodutiva,
+                        valor_economico,
+                        cinegetica,
+                        xerimbabo
+                    FROM especies
+                    """
+                )
+            ).mappings().all()
+        db_species = {_norm_text(r["nome_cientifico"]) for r in rows}
+        incomplete_species: dict[str, list[str]] = {}
+        for row in rows:
+            name_key = _norm_text(row["nome_cientifico"])
+            missing_values = [
+                col
+                for col in _REQUIRED_SPECIES_DB_COLUMNS
+                if _is_blank_catalog_value(row.get(col))
+            ]
+            if name_key and missing_values:
+                incomplete_species[name_key] = missing_values
     except Exception as exc:
         report.issues.append(
             ValidationIssue(
@@ -315,6 +510,7 @@ def check_especies_no_banco(
     }
     unknown = set()
     unknown_lines: list[int] = []
+    incomplete_used: dict[str, tuple[str, list[str], list[int]]] = {}
     for idx, value in df_resultados[species_col].items():
         if pd.isna(value) or not isinstance(value, str) or value.strip() == "":
             continue
@@ -322,6 +518,13 @@ def check_especies_no_banco(
         if value_norm not in db_species and value_norm not in allowed_species_norm:
             unknown.add(value.strip())
             unknown_lines.append(idx + 2)
+        elif value_norm in incomplete_species:
+            current = incomplete_used.get(
+                value_norm,
+                (value.strip(), incomplete_species[value_norm], []),
+            )
+            current[2].append(idx + 2)
+            incomplete_used[value_norm] = current
 
     if unknown:
         report.total_especies_desconhecidas = len(unknown)
@@ -341,6 +544,28 @@ def check_especies_no_banco(
                     )
                 ),
                 lines=unknown_lines[:10] if unknown_lines else [],
+                sheet="resultados",
+            )
+        )
+
+    if incomplete_used:
+        examples = []
+        lines: list[int] = []
+        for name, missing_values, issue_lines in list(incomplete_used.values())[:10]:
+            lines.extend(issue_lines[:2])
+            examples.append(
+                f"{name} (faltando: {', '.join(missing_values[:8])})"
+            )
+        report.issues.append(
+            ValidationIssue(
+                code="INCOMPLETE_SPECIES_CATALOG",
+                severity="block",
+                message=(
+                    f"{len(incomplete_used)} especie(s) usadas nos resultados existem "
+                    "no cadastro mestre, mas estao incompletas. Exemplos: "
+                    + " ; ".join(examples)
+                ),
+                lines=lines[:10],
             )
         )
 
@@ -388,6 +613,7 @@ def check_esforco(df_esforco: pd.DataFrame, report: ValidationReport) -> None:
                     f"Esforço deve ser numérico e não-negativo."
                 ),
                 lines=invalid_rows[:10],
+                sheet="esforco",
             )
         )
 
@@ -397,47 +623,75 @@ def check_referencias_cruzadas(
     df_pontos: pd.DataFrame,
     report: ValidationReport,
 ) -> None:
-    """Valida se pontos referenciados existem em Pontos_e_Campanhas."""
+    """Valida se pares campanha+ponto dos resultados existem em Pontos_e_Campanhas."""
     if df_resultados is None or df_resultados.empty or df_pontos is None:
         return
 
-    # Procura coluna de ponto nos resultados
-    ponto_col = None
-    for col in df_resultados.columns:
-        col_lower = col.lower()
-        if "ponto" in col_lower:
-            ponto_col = col
-            break
+    res_camp_col = _find_column(df_resultados, [("campanha",)])
+    res_ponto_col = _find_column(df_resultados, [("ponto",)])
+    pts_camp_col = _find_column(df_pontos, [("campanha",)])
+    pts_ponto_col = _find_column(df_pontos, [("ponto",)])
 
-    if not ponto_col:
+    missing = [
+        name
+        for name, col in [
+            ("Resultados.Campanha", res_camp_col),
+            ("Resultados.Ponto", res_ponto_col),
+            ("Pontos_e_Campanhas.Campanha", pts_camp_col),
+            ("Pontos_e_Campanhas.Ponto", pts_ponto_col),
+        ]
+        if col is None
+    ]
+    if missing:
+        report.issues.append(
+            ValidationIssue(
+                code="MISSING_CROSS_REFERENCE_COLUMNS",
+                severity="block",
+                message=(
+                    "Nao foi possivel validar referencias cruzadas campanha+ponto; "
+                    f"colunas ausentes: {missing}."
+                ),
+            )
+        )
         return
 
-    # Pontos válidos
-    if "Ponto" in df_pontos.columns or "ponto" in df_pontos.columns:
-        ponto_col_ref = "Ponto" if "Ponto" in df_pontos.columns else "ponto"
-        valid_pontos = set(df_pontos[ponto_col_ref].dropna().astype(str).unique())
-    else:
-        return
+    valid_pairs = {
+        (_norm_text(row.get(pts_camp_col)), _norm_text(row.get(pts_ponto_col)))
+        for _, row in df_pontos.iterrows()
+        if _norm_text(row.get(pts_camp_col)) and _norm_text(row.get(pts_ponto_col))
+    }
 
-    # Verificar
-    missing_pontos = []
-    for idx, value in df_resultados[ponto_col].items():
-        if pd.isna(value):
+    missing_pairs: list[tuple[int, str, str]] = []
+    for idx, row in df_resultados.iterrows():
+        camp = _norm_text(row.get(res_camp_col))
+        ponto = _norm_text(row.get(res_ponto_col))
+        if not camp or not ponto:
             continue
-        if str(value).strip() not in valid_pontos:
-            missing_pontos.append((idx + 2, str(value).strip()))
+        if (camp, ponto) not in valid_pairs:
+            missing_pairs.append(
+                (
+                    idx + 2,
+                    str(row.get(res_camp_col)).strip(),
+                    str(row.get(res_ponto_col)).strip(),
+                )
+            )
 
-    if missing_pontos:
+    if missing_pairs:
+        examples = [
+            f"linha {line}: {camp} / {ponto}"
+            for line, camp, ponto in missing_pairs[:5]
+        ]
         report.issues.append(
             ValidationIssue(
                 code="INVALID_POINT_REFERENCE",
-                severity="warning",
+                severity="block",
                 message=(
-                    f"Pontos referenciados não encontrados em Pontos_e_Campanhas: "
-                    f"{[p[1] for p in missing_pontos[:5]]}. "
-                    f"Total: {len(missing_pontos)}."
+                    f"{len(missing_pairs)} registro(s) de resultados referenciam "
+                    "campanha+ponto ausente em Pontos_e_Campanhas. Exemplos: "
+                    + " ; ".join(examples)
                 ),
-                lines=[p[0] for p in missing_pontos[:10]],
+                lines=[p[0] for p in missing_pairs[:10]],
+                sheet="resultados",
             )
         )
 
@@ -575,5 +829,6 @@ def check_resultados_vs_esforco(
                     + " ; ".join(examples)
                 ),
                 lines=[line for line, _, _ in invalid_refs[:10]],
+                sheet="resultados",
             )
         )

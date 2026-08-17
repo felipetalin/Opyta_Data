@@ -13,7 +13,8 @@ class ValidationIssue:
     code: str
     severity: str          # "block" | "warning" | "info"
     message: str
-    lines: list[int] = field(default_factory=list)  # linhas afetadas
+    lines: list[int] = field(default_factory=list)  # linhas afetadas (numero da linha no Excel)
+    sheet: str | None = None  # origem: "pontos" | "esforco" | "resultados" | "cadastro_especies"
 
 
 @dataclass

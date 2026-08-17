@@ -17,6 +17,7 @@ import pandas as pd
 from sqlalchemy.engine import Engine
 
 from .checkers import (
+    check_campaign_consistency,
     check_especies_no_banco,
     check_esforco,
     check_pontos_conflitantes_no_banco,
@@ -55,6 +56,7 @@ def _validate_embedded_species_catalog(
                 severity="block",
                 message=f"Cadastro_Especies: {issue.message}",
                 lines=[issue.row] if issue.row is not None else [],
+                sheet="cadastro_especies",
             )
         )
 
@@ -65,6 +67,7 @@ def _validate_embedded_species_catalog(
                 severity="warning",
                 message=f"Cadastro_Especies: {issue.message}",
                 lines=[issue.row] if issue.row is not None else [],
+                sheet="cadastro_especies",
             )
         )
 
@@ -125,6 +128,7 @@ def validate_importacao_file(
 
     # --- Etapa 2: Validações de dados ---
     embedded_allowed_species = _validate_embedded_species_catalog(report, engine)
+    check_campaign_consistency(report.df_pontos, report.df_esforco, report.df_resultados, report)
     check_pontos(report.df_pontos, report)
     check_esforco(report.df_esforco, report)
     check_resultados_vs_esforco(report.df_resultados, report.df_esforco, group, report)

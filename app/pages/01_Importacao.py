@@ -51,6 +51,7 @@ from runners.registry import ACTIONS, GROUP_TO_ACTION_KEY
 from runners.script_runner import run_python_script
 from validators.registry import VALIDATORS
 from validators.importacao import render_validation_report, validate_importacao_file
+from validators.gate_a_rules import GATE_A_IMPORT_RULES, GATE_A_UPDATE_NOTES
 
 
 # ------------------------------------------------
@@ -176,6 +177,14 @@ render_executive_summary(
 )
 
 st.markdown("### Operação de importação")
+
+with st.expander("Gate A - Planilha de dados e cadastro mestre", expanded=False):
+    st.markdown("Premissas bloqueantes antes de qualquer migracao:")
+    for rule in GATE_A_IMPORT_RULES:
+        st.markdown(f"- {rule}")
+    st.markdown("Como evoluir o gate:")
+    for note in GATE_A_UPDATE_NOTES:
+        st.markdown(f"- {note}")
 
 # ============================================================
 # Normalização / Correção segura (automática)
@@ -508,6 +517,105 @@ def render_scope_list(title: str, items: list[str], ok: bool = True) -> None:
         st.write(f"- {item}")
 
 
+def run_data_validation(cleaned_path: Path, grupo: str):
+    """Executa a validação de dados (Etapa 3) sobre o Excel já limpo/normalizado."""
+    from io import BytesIO
+
+    engine = None
+    try:
+        engine = get_engine()
+        return validate_importacao_file(
+            BytesIO(Path(cleaned_path).read_bytes()),
+            group=grupo,
+            engine=engine,
+            strict_unknown_species=True,
+        )
+    finally:
+        if engine is not None:
+            engine.dispose()
+
+
+_SHEET_NAME_BY_KEY = {
+    "pontos": "Pontos_e_Campanhas",
+    "esforco": "Metadados_Esforco",
+}
+
+
+def _resolve_sheet_name_map(cleaned_path: Path, grupo: str) -> dict[str, str]:
+    """Mapeia as chaves internas (pontos/esforco/resultados/cadastro_especies)
+    para o nome real da aba no Excel de trabalho."""
+    from validators.importacao.reader import REQUIRED_SHEETS_BY_GROUP
+
+    mapping = dict(_SHEET_NAME_BY_KEY)
+    expected = REQUIRED_SHEETS_BY_GROUP.get(grupo)
+    if expected:
+        mapping["resultados"] = expected[3]
+
+    available = set(pd.ExcelFile(cleaned_path).sheet_names)
+    if "Cadastro_Especies" in available:
+        mapping["cadastro_especies"] = "Cadastro_Especies"
+    elif "Especies" in available:
+        mapping["cadastro_especies"] = "Especies"
+
+    return mapping
+
+
+def apply_inline_corrections(cleaned_path: Path, grupo: str, report, registry: list[dict]) -> int:
+    """
+    Mescla de volta no Excel de trabalho os valores editados na tela (via
+    st.data_editor) durante a exibição do relatório de validação.
+    Retorna o número de linhas efetivamente atualizadas.
+    """
+    df_by_sheet_key = {
+        "pontos": getattr(report, "df_pontos", None),
+        "esforco": getattr(report, "df_esforco", None),
+        "resultados": getattr(report, "df_resultados", None),
+        "cadastro_especies": getattr(report, "df_cadastro_especies", None),
+    }
+
+    updates_by_sheet: dict[str, pd.DataFrame] = {}
+    total_updated = 0
+
+    for entry in registry:
+        sheet_key = entry["sheet"]
+        base_df = df_by_sheet_key.get(sheet_key)
+        edited = st.session_state.get(entry["value_key"])
+        if base_df is None or edited is None:
+            continue
+
+        merged = updates_by_sheet.get(sheet_key, base_df.copy())
+        edited_cols = [c for c in edited.columns if c != "_linha_excel"]
+        for row_idx in entry["row_indices"]:
+            if row_idx not in edited.index:
+                continue
+            for col in edited_cols:
+                if col in merged.columns:
+                    merged.at[row_idx, col] = edited.at[row_idx, col]
+            total_updated += 1
+        updates_by_sheet[sheet_key] = merged
+
+    if not updates_by_sheet:
+        return 0
+
+    sheet_name_by_key = _resolve_sheet_name_map(cleaned_path, grupo)
+
+    xls = pd.ExcelFile(cleaned_path)
+    all_sheets = {name: xls.parse(name) for name in xls.sheet_names}
+
+    with pd.ExcelWriter(cleaned_path, engine="openpyxl") as writer:
+        for sheet_name, df_sheet in all_sheets.items():
+            key_for_sheet = next(
+                (k for k, v in sheet_name_by_key.items() if v == sheet_name),
+                None,
+            )
+            if key_for_sheet and key_for_sheet in updates_by_sheet:
+                updates_by_sheet[key_for_sheet].to_excel(writer, sheet_name=sheet_name, index=False)
+            else:
+                df_sheet.to_excel(writer, sheet_name=sheet_name, index=False)
+
+    return total_updated
+
+
 # ============================================================
 # UI — seleção / upload
 # ============================================================
@@ -547,6 +655,8 @@ if current_upload_signature != previous_upload_signature:
     st.session_state["excel_para_migrar"] = None
     st.session_state["clean_changes"] = 0
     st.session_state["import_result"] = None
+    st.session_state["import_data_report"] = None
+    st.session_state["import_correction_gen"] = 0
     st.session_state["import_upload_signature"] = current_upload_signature
 
 action_key = GROUP_TO_ACTION_KEY[grupo]
@@ -604,6 +714,7 @@ if btn_validate:
 
             st.session_state["clean_changes"] = int(total_changes)
             st.session_state["excel_para_migrar"] = str(cleaned_path)
+            st.session_state["import_correction_gen"] = 0
             st.success("Limpeza automática concluída")
             st.metric("Correções de texto aplicadas", st.session_state["clean_changes"])
 
@@ -613,6 +724,7 @@ if btn_validate:
 
         if not ok_estrutural:
             st.session_state["validated_ok"] = False
+            st.session_state["import_data_report"] = None
             render_info_box("Validação estrutural falhou", box_type="error")
             for e in errors_estrutural:
                 st.write("-", e)
@@ -621,42 +733,67 @@ if btn_validate:
             render_info_box("Estrutura validada ✅", box_type="success")
 
             # Etapa 3: Validação de dados (coordenadas, espécies, esforço, refs cruzadas)
-            from io import BytesIO
-            engine = None
-            try:
-                engine = get_engine()
-                report = validate_importacao_file(
-                    BytesIO(Path(cleaned_path).read_bytes()),
-                    group=grupo,
-                    engine=engine,
-                    strict_unknown_species=True,
-                )
-            finally:
-                if engine is not None:
-                    engine.dispose()
-
+            report = run_data_validation(cleaned_path, grupo)
             st.session_state["import_data_report"] = report
-
-            render_validation_report(report)
-
+            st.session_state["validated_ok"] = bool(report.can_proceed)
             if report.can_proceed:
                 mark_stage_completed("importacao_status")
-                render_info_box("✅ Arquivo pronto para migração!", box_type="success")
-                st.session_state["validated_ok"] = True
-            else:
-                st.session_state["validated_ok"] = False
-                render_info_box("Há bloqueios que impedem a migração. Corrija-os e valide novamente.", box_type="warning")
 
     except Exception as exc:
         st.session_state["validated_ok"] = False
         render_info_box(f"Erro ao validar arquivo: {exc}", box_type="error")
 
-# Mostrar relatório de validação se disponível
+# ============================================================
+# Relatório de validação — renderizado de forma incondicional (fora do botão)
+# para que as tabelas editáveis sobrevivam a reruns causados pela edição.
+# ============================================================
+
 import_data_report = st.session_state.get("import_data_report")
-if import_data_report is not None and st.session_state.get("validated_ok") is None:
+if import_data_report is not None:
     st.markdown("---")
-    st.markdown("### Último relatório de validação")
+    st.markdown("### Relatório de validação")
     render_validation_report(import_data_report)
+
+    if import_data_report.can_proceed:
+        render_info_box("✅ Arquivo pronto para migração!", box_type="success")
+    else:
+        render_info_box(
+            "Há bloqueios que impedem a migração. Corrija-os abaixo (ou na planilha original) e valide novamente.",
+            box_type="warning",
+        )
+
+        editor_registry = st.session_state.get("import_editor_registry", [])
+        if editor_registry:
+            st.markdown("#### Aplicar correções feitas acima")
+            st.caption(
+                "As edições feitas nas tabelas do relatório ainda não foram salvas na planilha de trabalho. "
+                "Clique abaixo para aplicá-las e revalidar automaticamente, sem precisar reenviar o arquivo."
+            )
+            if st.button("💾 Aplicar correções e revalidar", key="import_apply_corrections"):
+                try:
+                    cleaned_path = Path(st.session_state["excel_para_migrar"])
+                    n_updated = apply_inline_corrections(
+                        cleaned_path, grupo, import_data_report, editor_registry
+                    )
+                    st.session_state["import_correction_gen"] = (
+                        st.session_state.get("import_correction_gen", 0) + 1
+                    )
+                    if n_updated == 0:
+                        render_info_box(
+                            "Nenhuma edição encontrada nas tabelas acima. Edite algum valor antes de aplicar.",
+                            box_type="warning",
+                        )
+                    else:
+                        with st.spinner("Revalidando arquivo com as correções aplicadas..."):
+                            new_report = run_data_validation(cleaned_path, grupo)
+                        st.session_state["import_data_report"] = new_report
+                        st.session_state["validated_ok"] = bool(new_report.can_proceed)
+                        if new_report.can_proceed:
+                            mark_stage_completed("importacao_status")
+                        st.success(f"{n_updated} linha(s) corrigida(s) aplicada(s). Relatório atualizado.")
+                        st.rerun()
+                except Exception as exc:
+                    render_info_box(f"Erro ao aplicar correções: {exc}", box_type="error")
 
 # ============================================================
 # Migração
