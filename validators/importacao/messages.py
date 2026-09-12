@@ -51,6 +51,14 @@ FIX_GUIDANCE: dict[str, str] = {
     "MISSING_EFFORT_LINK_COLUMNS": "Confirme que Campanha, Ponto, Metodo_de_Captura e Tipo_de_Amostragem existem tanto em Resultados quanto em Metadados_Esforco.",
     "EMPTY_EFFORT_KEYS": "Preencha ao menos uma linha completa (campanha+ponto+método+tipo) em Metadados_Esforco.",
     "INVALID_EFFORT_REFERENCE": "Confira se Campanha, Ponto, Método de Captura e Tipo de Amostragem estão escritos exatamente igual entre esta aba e Metadados_Esforco (inclusive maiúsculas/acentos).",
+    "MISSING_REQUIRED_COLUMN": "Restaure a coluna obrigatória usando o modelo oficial do grupo.",
+    "MISSING_REQUIRED_VALUE": "Preencha todas as células obrigatórias indicadas e valide novamente.",
+    "INVALID_NUMERIC_VALUES": "Use apenas números não negativos nos campos quantitativos; revise separadores decimais.",
+    "CAMPAIGN_DATE_MISMATCH": "Ajuste a data ou o rótulo da campanha para que ano e mês sejam consistentes.",
+    "EXACT_RESULT_DUPLICATES": "Confirme se as linhas repetidas representam registros reais; remova somente duplicatas indevidas.",
+    "SPECIES_CATALOG_DUPLICATES": "Mantenha uma única linha por nome científico no cadastro embutido.",
+    "METHOD_SET_MISMATCH": "Padronize os métodos usados nas abas de resultados e de esforço.",
+    "EFFORT_VALUE_MISMATCH": "Iguale o esforço informado no resultado ao valor correspondente em Metadados_Esforco.",
 
     # --- Cadastro de espécies embutido (prefixo CADASTRO_ESPECIES_*) ---
     "CADASTRO_ESPECIES_MISSING_REQUIRED_COLUMNS": "Baixe o modelo oficial de cadastro de espécies e confira se nenhuma coluna obrigatória foi removida ou renomeada.",

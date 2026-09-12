@@ -721,7 +721,8 @@ def check_resultados_vs_esforco(
         )
         return
 
-    # Colunas mínimas para chave composta entre resultados e esforço.
+    # Campanha+ponto formam a base universal. Método e tipo entram na chave
+    # somente quando existem nas duas abas; os modelos oficiais variam por grupo.
     res_camp = _find_column(df_resultados, [("campanha",)])
     res_ponto = _find_column(df_resultados, [("ponto",)])
     res_metodo = _find_column(df_resultados, [("metodo",), ("captura",)])
@@ -737,26 +738,8 @@ def check_resultados_vs_esforco(
         [("nome", "cient"), ("especie",), ("taxa",)],
     )
 
-    missing_res = [
-        name
-        for name, col in [
-            ("Campanha", res_camp),
-            ("Ponto", res_ponto),
-            ("Metodo_de_Captura", res_metodo),
-            ("Tipo_de_Amostragem", res_tipo),
-        ]
-        if col is None
-    ]
-    missing_esf = [
-        name
-        for name, col in [
-            ("Campanha", esf_camp),
-            ("Ponto", esf_ponto),
-            ("Metodo_de_Captura", esf_metodo),
-            ("Tipo_de_Amostragem", esf_tipo),
-        ]
-        if col is None
-    ]
+    missing_res = [name for name, col in [("Campanha", res_camp), ("Ponto", res_ponto)] if col is None]
+    missing_esf = [name for name, col in [("Campanha", esf_camp), ("Ponto", esf_ponto)] if col is None]
 
     if missing_res or missing_esf:
         parts = []
@@ -777,13 +760,25 @@ def check_resultados_vs_esforco(
         )
         return
 
-    def _key(row: pd.Series, camp_col: str, ponto_col: str, metodo_col: str, tipo_col: str) -> tuple[str, str, str, str]:
-        return (
-            _norm_text(row.get(camp_col)),
-            _norm_text(row.get(ponto_col)),
-            _norm_text(row.get(metodo_col)),
-            _norm_text(row.get(tipo_col)),
-        )
+    def _has_values(df: pd.DataFrame, col: str | None) -> bool:
+        return col is not None and any(_norm_text(value) for value in df[col].dropna())
+
+    use_method = _has_values(df_resultados, res_metodo) and _has_values(df_esforco, esf_metodo)
+    use_type = _has_values(df_resultados, res_tipo) and _has_values(df_esforco, esf_tipo)
+
+    def _key(
+        row: pd.Series,
+        camp_col: str,
+        ponto_col: str,
+        metodo_col: str | None,
+        tipo_col: str | None,
+    ) -> tuple[str, ...]:
+        values = [_campaign_code(row.get(camp_col)), _norm_text(row.get(ponto_col))]
+        if use_method and metodo_col:
+            values.append(_norm_text(row.get(metodo_col)))
+        if use_type and tipo_col:
+            values.append(_norm_text(row.get(tipo_col)))
+        return tuple(values)
 
     effort_keys = set()
     for _, row in df_esforco.iterrows():
@@ -798,13 +793,13 @@ def check_resultados_vs_esforco(
                 severity="block",
                 message=(
                     f"Grupo '{group}': nenhum esforço válido encontrado em Metadados_Esforco "
-                    "(chave campanha+ponto+método+tipo)."
+                    "(chave campanha+ponto e discriminadores compartilhados)."
                 ),
             )
         )
         return
 
-    invalid_refs: list[tuple[int, str, tuple[str, str, str, str]]] = []
+    invalid_refs: list[tuple[int, str, tuple[str, ...]]] = []
     for idx, row in df_resultados.iterrows():
         key = _key(row, res_camp, res_ponto, res_metodo, res_tipo)
         if not all(key) or key not in effort_keys:
@@ -813,10 +808,10 @@ def check_resultados_vs_esforco(
 
     if invalid_refs:
         examples = []
-        for line, especie, (camp, ponto, metodo, tipo) in invalid_refs[:5]:
+        for line, especie, key in invalid_refs[:5]:
             examples.append(
                 f"linha {line} | especie='{especie or '-'}' | "
-                f"esforco='{camp} | {ponto} | {metodo} | {tipo}'"
+                f"esforco='{' | '.join(key)}'"
             )
 
         report.issues.append(
@@ -825,7 +820,7 @@ def check_resultados_vs_esforco(
                 severity="block",
                 message=(
                     f"Grupo '{group}': {len(invalid_refs)} registro(s) de resultados sem esforço válido "
-                    "nos metadados (campanha+ponto+método+tipo). Exemplos: "
+                    "nos metadados (campanha+ponto e discriminadores compartilhados). Exemplos: "
                     + " ; ".join(examples)
                 ),
                 lines=[line for line, _, _ in invalid_refs[:10]],

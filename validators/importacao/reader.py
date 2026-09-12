@@ -6,6 +6,7 @@ from __future__ import annotations
 
 from io import BytesIO
 from pathlib import Path
+import re
 
 import pandas as pd
 
@@ -20,7 +21,14 @@ REQUIRED_SHEETS_BY_GROUP: dict[str, list[str]] = {
     "Avifauna": ["Capa_Projeto", "Pontos_e_Campanhas", "Metadados_Esforco", "Resultados_Avifauna"],
     "Herpetofauna": ["Capa_Projeto", "Pontos_e_Campanhas", "Metadados_Esforco", "Resultados_Herpetofauna"],
     "Mastofauna": ["Capa_Projeto", "Pontos_e_Campanhas", "Metadados_Esforco", "Resultados_Mastofauna"],
+    "Meio Físico": ["Capa_Projeto", "Pontos_e_Campanhas", "Resultados_Meio_Fisico"],
 }
+
+
+def _campaign_code(value: object) -> str:
+    text_value = str(value or "").replace("\u00A0", " ").strip().lower()
+    match = re.match(r"^(c\d+)", text_value)
+    return match.group(1) if match else text_value
 
 
 def read_sheets(
@@ -82,10 +90,14 @@ def read_sheets(
     try:
         df_capa = xls.parse("Capa_Projeto", dtype=str).dropna(how="all")
         df_pontos = xls.parse("Pontos_e_Campanhas", dtype=str).dropna(how="all")
-        df_esforco = xls.parse("Metadados_Esforco", dtype=str).dropna(how="all")
+        df_esforco = (
+            xls.parse("Metadados_Esforco", dtype=str).dropna(how="all")
+            if "Metadados_Esforco" in available
+            else pd.DataFrame()
+        )
         
         # Nome da aba de resultados deve seguir o grupo selecionado.
-        result_sheet = expected_sheets[3]
+        result_sheet = expected_sheets[-1]
         if result_sheet not in available:
             report.issues.append(
                 ValidationIssue(
@@ -158,7 +170,11 @@ def read_sheets(
     report.df_cadastro_especies = df_cadastro_especies
 
     # 6. Contar registros
-    report.total_campanhas = len(df_pontos["Campanha"].unique()) if "Campanha" in df_pontos else 0
+    report.total_campanhas = (
+        len({_campaign_code(value) for value in df_pontos["Campanha"].dropna().tolist()})
+        if "Campanha" in df_pontos
+        else 0
+    )
     report.total_pontos = len(df_pontos) if "Ponto" in df_pontos else 0
     report.total_registros = len(df_resultados)
     report.total_cadastro_especies = (

@@ -549,7 +549,7 @@ def _resolve_sheet_name_map(cleaned_path: Path, grupo: str) -> dict[str, str]:
     mapping = dict(_SHEET_NAME_BY_KEY)
     expected = REQUIRED_SHEETS_BY_GROUP.get(grupo)
     if expected:
-        mapping["resultados"] = expected[3]
+        mapping["resultados"] = expected[-1]
 
     available = set(pd.ExcelFile(cleaned_path).sheet_names)
     if "Cadastro_Especies" in available:

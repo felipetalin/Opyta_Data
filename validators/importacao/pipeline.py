@@ -26,6 +26,7 @@ from .checkers import (
     check_referencias_cruzadas,
 )
 from .reader import read_sheets
+from .advanced_checks import PHYSICAL_GROUPS, _norm, run_advanced_checks
 from .report import ValidationIssue, ValidationReport
 from ..especies.pipeline import validate_especies_file
 
@@ -127,22 +128,27 @@ def validate_importacao_file(
         return report
 
     # --- Etapa 2: Validações de dados ---
-    embedded_allowed_species = _validate_embedded_species_catalog(report, engine)
-    check_campaign_consistency(report.df_pontos, report.df_esforco, report.df_resultados, report)
+    is_physical = _norm(group) in PHYSICAL_GROUPS
+    embedded_allowed_species = set() if is_physical else _validate_embedded_species_catalog(report, engine)
+    if not is_physical:
+        check_campaign_consistency(report.df_pontos, report.df_esforco, report.df_resultados, report)
     check_pontos(report.df_pontos, report)
-    check_esforco(report.df_esforco, report)
-    check_resultados_vs_esforco(report.df_resultados, report.df_esforco, group, report)
+    if not is_physical:
+        check_esforco(report.df_esforco, report)
+        check_resultados_vs_esforco(report.df_resultados, report.df_esforco, group, report)
     check_referencias_cruzadas(report.df_resultados, report.df_pontos, report)
+    run_advanced_checks(report, group)
 
     # --- Etapa 3: Validações que dependem do banco ---
     if engine is not None:
         check_pontos_conflitantes_no_banco(report.df_capa, report.df_pontos, engine, report)
-        check_especies_no_banco(
-            report.df_resultados,
-            engine,
-            report,
-            allowed_species=set(allowed_species or set()) | embedded_allowed_species,
-            strict_unknown_species=strict_unknown_species,
-        )
+        if not is_physical:
+            check_especies_no_banco(
+                report.df_resultados,
+                engine,
+                report,
+                allowed_species=set(allowed_species or set()) | embedded_allowed_species,
+                strict_unknown_species=strict_unknown_species,
+            )
 
     return report
